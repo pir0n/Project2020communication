@@ -1,0 +1,17 @@
+{
+  "topics": {
+    "newPsw": "pswTable/newPsw",
+    "newPswTable": "pswTable/newTable",
+    "pswUsed": "pswTable/pswUsed"
+  },
+  "urls": {
+    "MainSystem": {
+		"ip": "127.0.0.2",
+		"port": "8080"
+	}
+  },
+  "broker": {
+      "ip": "test.mosquitto.org",
+      "port": "1883"
+  }
+}
