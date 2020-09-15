@@ -4,6 +4,7 @@
 import dbManager.dbManager as dbManager
 import json
 import datetime
+import traceback
 
 remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
                    "host": "kandula.db.elephantsql.com", "port": "5432"}
@@ -31,12 +32,15 @@ class SystemManagerInterface:
             queryString = input()
             if queryString == "-help":
                 self.printCmd()
-            elif queryString.startswith("addEvent"):
+            elif queryString.startswith("-addEvent"):
                 cmdArgs = queryString.split()  # separate input string by spaces
-                self.addEvent(cmdArgs[1:len(cmdArgs)])
-            elif queryString.startswith("printEvents"):
+                self.addEvent(cmdArgs)
+            elif queryString.startswith("-printEvents"):
                 cmdArgs = queryString.split()
-                self.printEvents(cmdArgs[1:len(cmdArgs)])
+                self.printEvents(cmdArgs)
+            elif queryString.startswith("-deleteEvent"):
+                cmdArgs = queryString.split()
+                self.deleteEvent(cmdArgs)
             elif queryString == "-exit":
                 print("Exiting application")
                 self.stop = True
@@ -45,16 +49,17 @@ class SystemManagerInterface:
 
     def printCmd(self):
         print("Command strings\n"
-              "Adding events with info taken from JSON file: addEvent date startTIme endTime -f FileName\n"
-              "Adding events with info inserted manually: addEvent date startTIme endTime -m\n"
-              "Printing all events scheduled for specified date: printEvents date")
+              "Adding events with info taken from JSON file: -addEvent date startTIme endTime -f FileName\n"
+              "Adding events with info inserted manually: -addEvent date startTIme endTime -m\n"
+              "Printing all events scheduled for specified date: -printEvents date\n"
+              "Deleting an event: -deleteEvent eventID")
 
     def printEvents(self, cmdArgs):
         global remoteDBparams
         try:
-            dateStr = cmdArgs[0]
+            dateStr = cmdArgs[1]
         except:
-            print("Error: input string does not have enough arguments, follow this command format to add events:\n"
+            print("Error: input string does not have enough arguments, follow this command format to print events:\n"
                   "[ printEvents date ]")
             return
         eventDate = self.getDate(dateStr)  # returns date object
@@ -71,10 +76,10 @@ class SystemManagerInterface:
     def addEvent(self, cmdArgs):
         global remoteDBparams
         try:
-            dateStr = cmdArgs[0]
-            startTimeStr = cmdArgs[1]
-            endTimeStr = cmdArgs[2]
-            infoType = cmdArgs[3]
+            dateStr = cmdArgs[1]
+            startTimeStr = cmdArgs[2]
+            endTimeStr = cmdArgs[3]
+            infoType = cmdArgs[4]
         except:
             print("Error: input string does not have enough arguments, follow this command format to add events:\n"
                   "[ addEvent date startTIme endTime -f FileName ] OR [ addEvent date startTIme endTime -m ]")
@@ -91,7 +96,7 @@ class SystemManagerInterface:
         if infoType == "-f":
             # load info from file
             try:
-                fileName = cmdArgs[4]
+                fileName = cmdArgs[5]
             except:
                 print("Error: file name is missing, specify file name after -f")
                 return
@@ -160,6 +165,20 @@ class SystemManagerInterface:
         dbManager.infoFill(eventID, eventDict, remoteDBparams=remoteDBparams)
         print(f"Event successfully inserted in database with eventID = {eventID}")
 
+    def deleteEvent(self, cmdArgs):
+        try:
+            eventID = cmdArgs[1]
+        except:
+            print("Error: input string does not have enough arguments, follow this command format to delete events:\n"
+                  "[ deleteEvent eventID ]")
+            return
+        # ACCESS DB THROUGH API
+        try:
+            dbManager.delete(eventID, remoteDBparams)
+        except:
+            print("Error accessing the DB")
+            traceback.print_exc()
+
     def getDate(self, dateStr):
         dateList = dateStr.split('-')
         try:
@@ -201,9 +220,8 @@ class SystemManagerInterface:
 
 
 if __name__ == "__main__":
-    # test cmd to add event addEvent 12-12-2020 13:30 15:00 -f eventInfo.json
     UI = SystemManagerInterface()
     UI.cmdConsole()
-    # addEvent 12-10-2020 13:30 15:00 -f eventInfo.json, gave eventID = 4
-    # addEvent 12-10-2020 16:30 18:00 -f eventInfo.json, gave eventID = 5
+    # -addEvent 12-10-2020 13:30 15:00 -f eventInfo.json, gave eventID = 6
+    # -addEvent 12-10-2020 16:30 18:00 -f eventInfo.json, gave eventID = 5
 
