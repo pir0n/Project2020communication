@@ -4,10 +4,16 @@ import datetime
 from datetime import date
 import time
 
-def add(date, startTime, endTime, name, ticketNum, cost):
+# parameters: startTime limits in add(), psycopg2.connect() arguments
+# remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
+#                   "host": "kandula.db.elephantsql.com", "port": "5432"}
 
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
+
+# argument "date" is a date object
+def add(date, startTime, endTime, name, ticketNum, cost, remoteDBparams):
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
         
     cur = conn.cursor()
 
@@ -94,10 +100,11 @@ def add(date, startTime, endTime, name, ticketNum, cost):
     return eventID
 
 
-def passwordFill(eventID, password):
-
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
+# password is a list with size = nTickets of eventID
+def passwordFill(eventID, password, remoteDBparams):
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
         
     cur = conn.cursor()
 
@@ -112,10 +119,11 @@ def passwordFill(eventID, password):
 
     return eventID 
 
-def infoFill(eventID, eventInfo):
 
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
+def infoFill(eventID, eventInfo, remoteDBparams):
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
         
     cur = conn.cursor()
 
@@ -145,10 +153,10 @@ def infoFill(eventID, eventInfo):
     return eventID
 
 
-def delete(eventID):
-
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
+def delete(eventID, remoteDBparams):
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
         
     cur = conn.cursor()
     
@@ -184,35 +192,39 @@ def delete(eventID):
     return eventID 
 
 
-def dailySchedule(date):
-
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
+def dailySchedule(date, remoteDBparams):
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
         
     cur = conn.cursor()
     
     cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
-    listID = cur.fetchall()[:][0]
+    IDtuples = cur.fetchall()
+    listID = []
+    for couple in IDtuples:
+        listID.append(couple[0])
 
     dailyEvents = {}
 
     for eventID in listID:
-        eventInfo = {}
+        dailyEvents[eventID] = {}
+        # eventInfo = {}
 
         cur.execute("SELECT name FROM events WHERE ID = %s;",(eventID,))
-        eventInfo["name"] = cur.fetchone()[0]
+        dailyEvents[eventID]["name"] = cur.fetchone()[0]
 
         cur.execute("SELECT cost FROM events WHERE ID = %s;",(eventID,))
-        eventInfo["cost"] = cur.fetchone()[0]
+        dailyEvents[eventID]["cost"] = cur.fetchone()[0]
 
         cur.execute("SELECT ticketTot FROM events WHERE ID = %s;",(eventID,))
-        eventInfo["ticketNum"] = cur.fetchone()[0]
+        dailyEvents[eventID]["ticketNum"] = cur.fetchone()[0]
 
         cur.execute(sql.SQL("SELECT startTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
-        eventInfo["startTime"] = cur.fetchone()[0]
+        dailyEvents[eventID]["startTime"] = cur.fetchone()[0]
 
         cur.execute(sql.SQL("SELECT endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
-        eventInfo["endTime"] = cur.fetchone()[0]
+        dailyEvents[eventID]["endTime"] = cur.fetchone()[0]
 
         tableInfo = "info "+str(eventID)
         types = ("EN","IT","PL","URLs")
@@ -225,9 +237,7 @@ def dailySchedule(date):
                 for j in range(0,len(info)):
                     if info[j][1] == i:
                         text = text + info[j][0]
-            eventInfo[infoType] = text
-        
-        dailyEvents[eventID] = eventInfo
+            dailyEvents[eventID][infoType] = text
 
     conn.commit()
     cur.close()
@@ -236,10 +246,11 @@ def dailySchedule(date):
     return dailyEvents 
 
 
-def ticketRetrieve(eventID, eMail):
+def ticketRetrieve(eventID, eMail, remoteDBparams):
 
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
         
     cur = conn.cursor()
 
@@ -257,7 +268,7 @@ def ticketRetrieve(eventID, eMail):
     return password
 
 
-def gateAccess(eventID, password):
+def gateAccess(eventID, password, remoteDBparams):
 
     conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
         host="kandula.db.elephantsql.com",port="5432")

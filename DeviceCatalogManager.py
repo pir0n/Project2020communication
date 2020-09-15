@@ -9,7 +9,7 @@ import requests
 # catalog data .json file
 class catalog:
     requestsFormat = {"urls request": "/urls", "topics request": "/topics",
-                      "broker url request": "/broker", "all": "/all"}
+                      "broker url request": "/broker", "all": "/all", "db parameters":"/dbParams"}
 
     def __init__(self, homeCatalogURL, homeCatalogPort, requestsFormat = None):
         if not homeCatalogURL.startswith("http://"):
@@ -19,6 +19,7 @@ class catalog:
         self.topics = {}
         self.urls = {}
         self.broker = {}
+        self.dbParams = {}
 
     def requestURLS(self):
         r = requests.get(self.catalogURL+self.requestsFormat["urls request"])
@@ -34,6 +35,11 @@ class catalog:
         r = requests.get(self.catalogURL + self.requestsFormat["topics request"])
         rawData = r.content
         self.broker = json.loads(rawData)
+
+    def requestDbParams(self):
+        r = requests.get(self.catalogURL + self.requestsFormat["db parameters"])
+        rawData = r.content
+        self.dbParams = json.loads(rawData)
 
     def requestAll(self):  # get broker urls, topics and urls
         r = requests.get(self.catalogURL + self.requestsFormat["all"])
@@ -53,6 +59,10 @@ class catalog:
             self.broker = jsonDict["broker"]
         except:
             raise KeyError("data from home catalog has no 'broker' key")
+        try:
+            self.dbParams = jsonDict["dbParams"]
+        except:
+            raise KeyError("data from home catalog has no 'dbParams' key")
         return True
 
 

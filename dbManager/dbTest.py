@@ -1,4 +1,4 @@
-import dbManager
+import dbManager.dbManager as dbManager
 import datetime
 
 date = datetime.date(2020,12,8)

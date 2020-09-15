@@ -1,0 +1,19 @@
+{
+  "nTickets": 20,
+  "price": 10.55,
+  "URLs": ["testurl1", "testurl2"],
+  "info": {
+    "IT": {
+      "name": "IT_test_name",
+      "desc": "IT_test_desc"
+    },
+    "EN": {
+      "name": "EN_test_name",
+      "desc": "EN_test_desc"
+    },
+    "PL":{
+      "name": "PL_test_name",
+      "desc": "PL_test_desc"
+    }
+  }
+}
