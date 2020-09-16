@@ -1,0 +1,4 @@
+{
+  "resourceCatalog":{"ip": "127.0.0.1", "port": 8080},
+  "MainSystem": {"ip": "127.0.0.2", "port": 8081}
+}
