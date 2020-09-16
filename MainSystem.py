@@ -7,24 +7,27 @@ import cherrypy
 import pyqrcode
 from fpdf import FPDF
 import email, smtplib, ssl
-import png
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pswUpdateMQTTClient import PswMQTTClient
 from DeviceCatalogManager import catalog
+import dbManager.dbManager as dbManager
+import png
 
 testEV = 1  # enable fake events  for testing
 # MAIN CONTROL OF THE BOOKING SYSTEM, ACCESSIBLE THROUGH REST APIs
 # processes:
-# password table generation and retrieval from database, conversion to QR code and delivery of code to user through email
-# MQTT communication with (possibly) multiple gates to send acceptable passwords
-# MORE
+# password retrieval from database, conversion to QR code and delivery of code to user through email
+# MQTT communication with multiple gates to send acceptable passwords
+
 DEBUG = True
 dailyEventsPswTable = None
 catalogData = None
-
+remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
+                   "host": "kandula.db.elephantsql.com", "port": "5432"}
+configFileName = "configFile.json"
 
 class VirtualTicketHandler:
     global dailyEvents
@@ -125,17 +128,12 @@ class VirtualTicketHandler:
             for el in passwordList:
                 self.pswToQr(el, self.imgPath + str(i))  # generate a QR png for each psw
                 i += 1
-            self.generatePDF(len(passwordList)) # pdf with 1 page per ticket
+            self.generatePDF(len(passwordList))  # pdf with 1 page per ticket
         else:
             self.pswToQr(passwordList, self.imgPath)  # generate a png file in the directory
             self.generatePDF(1)  # generate a pdf containing the QR png in the directory
 
         self.sendMail(name, mail_addr, event)
-
-    def getPassword(self):
-        # TO-DO
-        # retrieve a valid password from the table and mark it as used
-        pass
 
 
 class MainSystemMQTT(PswMQTTClient):
@@ -151,12 +149,19 @@ class MainSystemMQTT(PswMQTTClient):
         dailyEventsPswTable = self.pswTable  # update global variable
 
     def myOnMessageReceived(self, client, userdata, msg):
+        global DEBUG
         # main system won't subscribe to newPswTable topic
         if msg.topic == self.msgTopics["newPsw"]:
             # ADD THE ENTRY INSIDE THE PASSWORD TABLE
             newPswDict = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.addPswEntry(newPswDict)
+                if DEBUG:  # global debug variable
+                    print(f"setting psw: {newPswDict['psw']} of event: {newPswDict['eventID']} as used")
+                    for psw in dailyEventsPswTable[str(newPswDict['eventID'])]["pswTable"]:
+                        if psw["psw"] == newPswDict['psw']:
+                            print("psw entry in list:", psw)
+                            break
             except:
                 print("Received newPsw message with bad body format or for eventID not present in the table")
         elif msg.topic == self.msgTopics["pswUsed"]:
@@ -174,41 +179,47 @@ class JobSchedulerThread(threading.Thread):
     theadStop = False  # stops the thread when set to True
     on = False #indicates if the MQTT client is on
 
-    def __init__(self, dailyEvents, Rtime, subTopics = None):
+    def __init__(self, Rtime, subTopics = None):
         # Rtime must be a string of format HH:MM, indicating the time at which the system will update the daily event list
         global catalogData
         global dailyEventsPswTable
         threading.Thread.__init__(self)
-        self.eventList = dailyEvents
         self.requestTime = Rtime
 
         # start MQTT client
-        self.MQTTClient = MainSystemMQTT(clientID="MainSystem", brokerPort=catalogData.broker["port"],
+        self.MQTTClient = MainSystemMQTT(clientID="MainSystem", brokerPort=int(catalogData.broker["port"]),
                                          MQTTbroker=catalogData.broker["ip"], msgTopics=catalogData.topics,
                                          subscribedTopics=subTopics, initialPswTable=dailyEventsPswTable)
-        self.MQTTClient.start()
-        self.startSchedule()
+        try:
+            self.MQTTClient.start() # TEMPORARELY DISABLE BECAUSE test.mosquitto.org is down
+        except:
+            raise Exception("Could not start MQTT client, check if the configuration is correct")
         self.on = True
+        #self.startSchedule()
 
     def getDailyTable(self):
         global dailyEventsPswTable
-        today = datetime.date.today()
-        # get current date
-        currDay = today.day
-        currMonth = today.month
-        #
-        # TO-DO retrieve the daily schedule from the data base
-        #
-        receivedDailyEvents = {}  # list of dictionaries (from the json formatted string rx by the DB)
-        # update global variable dailyEvents
-        # self.eventList.clear()
-        # update daily event list
-        # {“eventID”:{“startTime”:, “endTime”:, “pswTable”:, }
-        self.sendDailyTable()  # send daily psw table to MQTT to gates
+        global remoteDBparams
+        eventDate = datetime.date(2020, 10, 12) #12-10-2020, DEBUG DATE
+        # eventDate = datetime.date.today()
+        receivedDailyEvents = dbManager.dailySchedule(eventDate, remoteDBparams)
+        # received dictionary:
+        # {eventid: {'name':, 'cost':, 'ticketNum':, 'startTime':, 'endTime':, 'EN':,
+        #      'IT':, 'PL':, 'URLs': '{testurl1,testurl2}'}
+        # WARNING: pswTable is not present in the DB returned dict
+        tmpDict = {}
+        for event in list(receivedDailyEvents.items()):
+            eventID = event[0]
+            value = event[1]
+            tmpDict[str(eventID)] = {"startTime": value["startTime"], "endTime": value["startTime"], "pswTable":[]}
 
-    def startSchedule(self, Rtime=None, url=None):
-        if url is not None:
-            self.DailyScheduleURL = url  # allows to change url
+        # {“eventID”:{“startTime”:, “endTime”:, “pswTable”:, }
+        # update daily event list
+        dailyEventsPswTable = tmpDict
+        print("received daily event table: ", dailyEventsPswTable)
+
+
+    def startSchedule(self, Rtime=None):
         if Rtime is not None:
             self.requestTime = Rtime
         self.on = True
@@ -229,16 +240,18 @@ class JobSchedulerThread(threading.Thread):
     def changeTime(self, newTime):
         self.requestTime = newTime
         schedule.clear()
-        schedule.every().day.at(self.requestTime).do(self.getDailyTable)
+        schedule.every().day.at(self.requestTime).do(self.sendDailyTable)
 
     def sendDailyTable(self):
-        # send  the daily psw table through MQTT
+        # send get the daily table from DB and then send it to all gates through MQTT
         global catalogData
+        self.getDailyTable()
         self.MQTTClient.publish(catalogData.topics["newPswTable"], json.dumps(dailyEventsPswTable))
 
 
 # RESTful interface exposed through cherrypy
 class MainSystemREST(object):
+    schedulerActive = False  # flag to keep track of scheduler thread
     # generate some TEST events
     global testEV
     global dailyEventsPswTable  # on activation the backend should request the daily table to database
@@ -265,7 +278,7 @@ class MainSystemREST(object):
     DBrequestsURL = {"daily_schedule": "placeholder"}
     # initiate classes
     virtualTicketHandler = VirtualTicketHandler()
-    requestScheduler = None # this class must be initialized through the REST API
+    requestScheduler = None  # this class must be initialized through the REST API
     initialized = False
 
     def GET(self, *uri):
@@ -302,6 +315,7 @@ class MainSystemREST(object):
                         raise json.dumps(dailyEventsPswTable)
 
     def PUT(self, *uri, **param):
+        global remoteDBparams
         global dailyEventsPswTable
         global testEV
         global catalogData
@@ -311,6 +325,8 @@ class MainSystemREST(object):
             # customer services
             if uri[0] == "customer":
                 if uri[1] == "newTicket":  # return the chosen password
+                    if not self.initialized:
+                        raise cherrypy.HTTPError(500, "system not initialized")
                     if not self.requestScheduler.on:
                         raise cherrypy.HTTPError(500, "MQTT client is not active")
                     # NOTE: this request takes about 3 seconds to complete
@@ -319,69 +335,80 @@ class MainSystemREST(object):
                     # format {"Eventname":"", "mailAddress":"", "event_ID":, "n_tickets":}
                     rawPayload = cherrypy.request.body.read()
                     ReqjsonStr = rawPayload.decode("utf-8")
-                    Reqdict = json.loads(ReqjsonStr)
+                    try:
+                        Reqdict = json.loads(ReqjsonStr)
+                    except:
+                        raise cherrypy.HTTPError(500, "could not load JSON string in body")
                     # check format of body
-                    if not("name" in Reqdict.keys() and "mailAddress" in Reqdict.keys() and "event_name" in Reqdict.keys() \
-                            and "event_ID" in Reqdict.keys() and "timeslot" in Reqdict.keys() and "n_tickets" in Reqdict.keys()):
+                    if not("name" in Reqdict.keys() and "eMail" in Reqdict.keys() and "event_name" in Reqdict.keys() \
+                            and "eventID" in Reqdict.keys() and "n_tickets" in Reqdict.keys()):
                         raise cherrypy.HTTPError(500, "invalid request format")
                     # send eventID, timeslot, e-mail, n_tickets to DB, DB returns n passwords (JSON  list)
-                    # send password to the user
-                    if testEV:
-                        sel_psws = ["test1", "test2"]  # placeholder password because database not yet implemented
-                    if DEBUG:
-                        print(f'sending QR code to {Reqdict["name"]}, mail:{Reqdict["mailAddress"]} for event: {Reqdict["event_name"]}')
 
-                    self.virtualTicketHandler.sendTicket(Reqdict["name"], Reqdict["mailAddress"], Reqdict["event_name"],
-                                                         sel_psws)
+                    # ACCESS DB THROUGH APIs
+                    if int(Reqdict["n_tickets"]) > 1:
+                        sel_psw = []
+                        for i in range(0, Reqdict["n_tickets"]):
+                            returnVal = dbManager.ticketRetrieve(Reqdict["eventID"], Reqdict["eMail"],
+                                                               remoteDBparams)
+                            if returnVal is None:
+                                break  # no more tickets
+                                #return sel_psw
+                            sel_psw.append(returnVal)
+                    else:
+                        sel_psw = dbManager.ticketRetrieve(int(Reqdict["eventID"]), Reqdict["eMail"], remoteDBparams)
+                        # NOTE: eventID is an int for now, might change in future
+                        if sel_psw is None:
+                            return "no ticket available"
+                    # send password to the user
+                    if DEBUG:
+                        print(f'sending QR code to {Reqdict["name"]}, mail:{Reqdict["eMail"]} for event: {Reqdict["event_name"]}')
+
+                    print("sending psw list:", sel_psw)
+                    self.virtualTicketHandler.sendTicket(Reqdict["name"], Reqdict["eMail"], Reqdict["event_name"],
+                                                         sel_psw)
+
                     # insert password in daily table and send to gates IF the event is in daily table
-                    if Reqdict["event_ID"] in dailyEventsPswTable:  # check if event in daily table
+                    if str(Reqdict["eventID"]) in dailyEventsPswTable:  # check if event in daily table
                         # insert psw in daily psw table and then send a "newPsw" MQTT message to gates
-                        if type(sel_psws) is list:
-                            for psw in sel_psws:
-                                dailyEventsPswTable[Reqdict["event_ID"]]["pswTable"].append({"psw": psw, "used": False})
+                        if type(sel_psw) is list:
+                            for psw in sel_psw:
+                                dailyEventsPswTable[Reqdict["eventID"]]["pswTable"].append({"psw": psw, "used": False})
                                 # send the password to the gates through MQTT
                                 # msg format : {"eventID":, "psw":}
-                                dict_msg = {"eventID": Reqdict["event_ID"], "psw":psw}
+                                dict_msg = {"eventID": Reqdict["eventID"], "psw": psw}
                                 json_msg = json.dumps(dict_msg)
                                 self.requestScheduler.MQTTClient.publish(catalogData.topics["newPsw"], json_msg)
                         else:
-                            dailyEventsPswTable[Reqdict["event_ID"]]["pswTable"].append({"psw": sel_psws, "used": False})                            # send the password to the gates through MQTT
+                            dailyEventsPswTable[Reqdict["eventID"]]["pswTable"].append({"psw": sel_psw, "used": False})
                             # msg format : {"eventID":, "psw":}
-                            dict_msg = {"eventID": Reqdict["event_ID"], "psw": sel_psws}
+                            dict_msg = {"eventID": Reqdict["eventID"], "psw": sel_psw}
                             json_msg = json.dumps(dict_msg)
                             self.requestScheduler.MQTTClient.publish(catalogData.topics["newPsw"], json_msg)
+                    return json.dumps(sel_psw)  # return the passwords
 
             # system management
             if uri[0] == "system":
                 # management of the MQTT client
                 if uri[1] == "start":  # THIS SHOULD ALWAYS BE CALLED AFTER SCRIPT IS EXECUTED
+                    print("received start request")
                     if not self.initialized:
-                        #
-                        # TO-DO: request daily schedule from DB
-                        #
-                        dailyEventPsw = {}
-                        self.requestScheduler = JobSchedulerThread(dailyEventPsw, "00:00", catalogData.topics["pswUsed"])
+                        # instantiate the scheduler and initialize its MQTT client
+                        self.requestScheduler = JobSchedulerThread("00:00", catalogData.topics["pswUsed"])
+                        # raise cherrypy.HTTPError(500, "could not start MQTT client")
+                        self.requestScheduler.getDailyTable()  # get daily table from DB
                         self.requestScheduler.startSchedule()
-
-                # if uri[1] == "MQTTclient": # TO:DO- update part
-                #     if uri[2] == "start":
-                #         if self.mqtt.on:
-                #             raise cherrypy.HTTPError(403, "the MQTT client is already on")
-                #         else:
-                #             self.mqtt.start()
-                #             self.mqtt.on = True
-                #     elif uri[2] == "stop":
-                #         if not self.mqtt.on:
-                #             raise cherrypy.HTTPError(403, "the MQTT client is already off")
-                #         else:
-                #             self.mqtt.stop()
-                #             self.mqtt.on = False
-                #     elif uri[2] == "status":
-                #         return str(self.mqtt.on)
-                #     else:
-                #         raise cherrypy.HTTPError(404, "invalid request")
+                        # {"eventID" : {'cost': 11, 'ticketNum': 20, 'startTime': 16, 'endTime': 18}}
+                        self.initialized = True
 
                 # management of the scheduler
+                if uri[1] == "MQTT":
+                    # sent currently stored daily table to all subscribed gates
+                    if uri[2] == "sendDailyTable":
+                        if not self.initialized:
+                            raise cherrypy.HTTPError(500, "MQTT client not initialized")
+                        self.requestScheduler.sendDailyTable()
+
                 if uri[1] == "scheduler":
                     if uri[2] == "start":
                         if self.requestScheduler.on:
@@ -411,9 +438,14 @@ class MainSystemREST(object):
                             else:
                                 raise cherrypy.HTTPError(403, "incorrect parameter format")
 
+            else:
+                raise cherrypy.HTTPError(404, "invalid url")
 
 if __name__ == '__main__':
-    catalogData = catalog()
+    # open configuration file
+    with open(configFileName, "r") as fp:
+        config = json.load(fp)
+    catalogData = catalog(config["resourceCatalog"]["ip"], config["resourceCatalog"]["port"])
     catalogData.requestAll()
     conf = {
         '/': {
@@ -422,6 +454,9 @@ if __name__ == '__main__':
         }
     }
     cherrypy.tree.mount(MainSystemREST(), '/', conf)
+    ip = config["MainSystem"]["ip"]
+    port = config["MainSystem"]["port"]
+    cherrypy.config.update({"server.socket_host": str(ip), "server.socket_port": int(port)})
     cherrypy.engine.start()
     cherrypy.engine.block()
 
