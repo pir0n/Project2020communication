@@ -257,8 +257,10 @@ def ticketRetrieve(eventID, eMail, remoteDBparams):
     tablePass = "password "+str(eventID)
     
     cur.execute(sql.SQL("SELECT password FROM {} WHERE eMail = %s LIMIT 1;").format(sql.Identifier(tablePass)),("empty",))
-    password = cur.fetchone()[0]
-
+    try:
+        password = cur.fetchone()[0]
+    except:
+        return None
     cur.execute(sql.SQL("UPDATE {} SET eMail = %s WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
 
     conn.commit()
