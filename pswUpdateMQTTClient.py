@@ -3,9 +3,11 @@ import json
 
 
 class PswMQTTClient(MQTT_client):
+    DEBUG = False
+    pswTable = {}
 
     def __init__(self, clientID, MQTTbroker, msgTopics, brokerPort = 1883, Qos = 2, subscribedTopics = None, initialPswTable = None):
-        MQTT_client.__init__(clientID, MQTTbroker, brokerPort, Qos, subscribedTopics)
+        MQTT_client.__init__(self, clientID, MQTTbroker, brokerPort, Qos, subscribedTopics)
         if not("newPsw" in msgTopics and "newPswTable" in msgTopics and "pswUsed" in msgTopics):
             raise KeyError("msgTopics dict has incorrect keys")
         else:
@@ -13,16 +15,19 @@ class PswMQTTClient(MQTT_client):
         if initialPswTable is not None:
             self.pswTable = initialPswTable
 
+
     def myOnMessageReceived(self, client, userdata, msg):
         # main system won't subscribe to newPswTable topic
         if msg.topic == self.msgTopics["newPsw"]:
+            # ADD THE ENTRY INSIDE THE PASSWORD TABLE
             newPswDict = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.addPswEntry(newPswDict)
+                if self.DEBUG:
+                    print("added new password entry:", newPswDict)
+                    print(f'psw list for {str(newPswDict["eventID"])}: {self.pswTable[str(newPswDict["eventID"])]["pswTable"]}')
             except:
                 print("Received newPsw message with bad body format or for eventID not present in the table")
-            # ADD THE ENTRY INSIDE THE PASSWORD TABLE
-            pass
         elif msg.topic == self.msgTopics["pswUsed"]:
             # SET SPECIFIED PASSWORD AS USED
             usedPswDict = json.loads(msg.payload.decode('utf-8'))
@@ -35,14 +40,16 @@ class PswMQTTClient(MQTT_client):
             newPswTable = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.setPswTable(newPswTable)
+                if self.DEBUG:
+                    print("received newPswTable msg, updated psw table: ", self.pswTable)
             except:
                 print("Received newPswTable message with bad table format")
 
     def addPswEntry(self, newPswDict):
         # msg format : {"eventID":, "psw":}
         if "eventID" in newPswDict and "psw" in newPswDict:
-            if newPswDict["eventID"] in self.pswTable:
-                self.pswTable[newPswDict["eventID"]]["pswTable"].append({"psw": newPswDict["psw"], "used": False})
+            if str(newPswDict["eventID"]) in self.pswTable:
+                self.pswTable[str(newPswDict["eventID"])]["pswTable"].append({"psw": newPswDict["psw"], "used": False})
             else:
                 raise KeyError(f"id: {newPswDict['eventID']} not present in psw table")
         else:
@@ -69,8 +76,11 @@ class PswMQTTClient(MQTT_client):
         # msg format : {“eventID”:{“startTime”:, “endTime”:, “pswTable”:, }}
         # PswTable has format {“psw”:numericalPsw, “used”:boolVar}
         # check if format is correct
+        if self.DEBUG:
+            print("received psw table:", newPswTable)
         for event in list(newPswTable.items()):
             if not("startTime" in event[1] and "endTime" in event[1] and "pswTable" in event[1]):
-                raise KeyError(f"{event[0]} has a bad data format")
+                print(f"{event[0]} has a bad data format: {event[1]}")
+                #raise KeyError(f"{event[0]} has a bad data format")
         self.pswTable.clear()
         self.pswTable = newPswTable
