@@ -2,13 +2,15 @@
 
 import cherrypy
 import json
+dataFileName = "catalogData.json"
 
 class resourceCatalog(object):
     exposed = True
     def GET(self, *uri, **params):
+        global dataFileName
         # reading the file with the informations
         try:
-            file = open("initialData.json", "r")
+            file = open(dataFileName, "r")
             self.jsonString = file.read()
             file.close()
         except:
