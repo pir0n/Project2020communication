@@ -10,7 +10,7 @@ import time
 
 
 # argument "date" is a date object
-def add(date, startTime, endTime, name, ticketNum, cost, remoteDBparams):
+def add(date, startTime, endTime, ticketNum, cost, remoteDBparams):
     conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
                             password=remoteDBparams["password"],
                             host=remoteDBparams["host"], port=remoteDBparams["port"])
@@ -32,51 +32,71 @@ def add(date, startTime, endTime, name, ticketNum, cost, remoteDBparams):
     if not check:
         flag = 1
         #create date table
-        cur.execute(sql.SQL("CREATE TABLE {} (ID int, startTime int,\
-                    endTime int);").format(sql.Identifier(dateName)))
+        cur.execute(sql.SQL("CREATE TABLE {} (ID int, startTime varchar(6),\
+                    endTime varchar(5));").format(sql.Identifier(dateName)))
 
-    # I suppose startTime to be an int, startTime = int(startTime)
-    if startTime < 8 or startTime > 19:
-        print("Error: start time is out of time window limit, please insert a valid time (7<startTime<20)")
+    startList = startTime.split(":")
+    startList[0] = int(startList[0])
+    startList[1] = int(startList[1])
+    if startList[0] > 23:
+        print("Error: start time hour is invalid (00<=startHour<=23)")
         return -1
- 
-    if endTime < 9 or endTime > 20:
-        print("Error: end time is out of time window limit, please insert a valid time (8<endTime<21")
+    if startList[1] > 59:
+        print("Error: start time minutes are invalid (00<=startMinutes<=59)")
+        return -1
+    if startList[0] == 23 and startList[1] == 59:
+        print("Error: max start time is 23:58")
+        return -1
+
+    endList = endTime.split(":")
+    endList[0] = int(endList[0])
+    endList[1] = int(endList[1])
+    if endList[0] > 23:
+        print("Error: end time hour is invalid (00<=endHour<=23)")
+        return -1
+    if endList[1] > 59:
+        print("Error: end time minutes are invalid (00<=endMinutes<=59)")
+        return -1
+    if endList[0] == 00 and endList[1] == 00:
+        print("Error: min end time is 00:01")
+        return -1
+    
+    startMinutes = startList[0]*60+startList[1]
+    endMinutes = endList[0]*60+endList[1]
+    
+    if startMinutes > endMinutes:
+        print("Error: end time is before start time, please insert a valid hour")
         return -1
     else:
-        if startTime > endTime:
-            print("Error: end time is before start time, please insert a valid hour")
+        if startMinutes == endMinutes:
+            print("Error: end time is the same as start time, please insert a valid hour")
             return -1
-        else:
-            if startTime == endTime:
-                print("Error: end time is the same as start time, please insert a valid hour")
-                return -1
 
     if not flag:
         #check for time window validity, and return in case of failure
         cur.execute(sql.SQL("SELECT startTime, endTime FROM {};").format(sql.Identifier(dateName)))
         usedTime = cur.fetchall()
         for i in range(len(usedTime)):
-            if startTime==usedTime[i][0] or (startTime>usedTime[i][0] and startTime<usedTime[i][1])\
-               or endTime==usedTime[i][1] or (endTime>usedTime[i][0] and endTime<usedTime[i][1])\
-               or (startTime<usedTime[i][0] and endTime>usedTime[i][1]):
+            usedStart = int(usedTime[i][0][0:2])*60+int(usedTime[i][0][3:5])
+            usedEnd = int(usedTime[i][1][0:2])*60+int(usedTime[i][1][3:5])
+            if startMinutes==usedStart or (startMinutes>usedStart and startMinutes<usedEnd)\
+               or endMinutes==usedEnd or (endMinutes>usedStart and endMinutes<usedEnd)\
+               or (startMinutes<usedStart and endMinutes>usedEnd):
                 print("Error: given time window is unavailable. The occupied slots will now be printed. Please retry with valid values.") 
                 i = 8
-                for i in range(8,20):
-                    for j in range(len(usedTime)):
-                        if usedTime[j][0] == i:
-                            print("Slot from "+str(i)+" to "+str(usedTime[j][1])+";")
+                for i in range(len(usedTime)):
+                    print("Slot from "+usedTime[i][0]+" to "+usedTime[i][1]+";")
                 return -1
 
     cur.execute("SELECT min(ID) FROM events;")
-    newID = cur.fetchone()
-    if type(newID[0]) == type(0):
-        if newID[0] != 0:
-            eventID = newID[0] - 1
+    newID = cur.fetchone()[0]
+    if type(newID) == type(0):
+        if newID != 0:
+            eventID = newID - 1
         else:
             cur.execute("SELECT max(ID) FROM events;")
             newID = cur.fetchone()
-            eventID = newID[0] + 1
+            eventID = newID + 1
     else:
         eventID = 0
 
@@ -129,22 +149,34 @@ def infoFill(eventID, eventInfo, remoteDBparams):
 
     tableNameInfo = "info "+str(eventID)
 
-    types = ("EN","IT","PL","URLs")
+    types = ("EN","IT","PL")
 
     for infoType in types:
+
+        infoTemp = eventInfo[infoType]["name"]
+        tempType = "name"+infoType
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,0))
+
         flag = 0
         i = 0
-        infoTemp = eventInfo[infoType]
+        infoTemp = eventInfo[infoType]["info"]
+        tempType = "info"+infoType
         while flag == 0:
             if len(infoTemp)>255:
                 info = infoTemp[0:255]
-                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,infoType,i))
+                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,i))
                 i = i + 1
                 infoTemp = infoTemp[255:]
             else:
                 info = infoTemp
                 cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,infoType,i))
                 flag = 1
+    
+    i = 0
+    tempType = "URLs"
+    for url in eventInfo[type]:
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,tempType,i))
+        i = i + 1
 
     conn.commit()
     cur.close()
@@ -192,7 +224,49 @@ def delete(eventID, remoteDBparams):
     return eventID 
 
 
-def dailySchedule(date, remoteDBparams):
+def deleteDate(date, remoteDBparams):
+
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+        
+    cur = conn.cursor()
+
+    cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
+    IDtuples = cur.fetchall()
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    for eventID in IDtuples:
+        delete(eventID[0], remoteDBparams)
+
+    return 0
+
+
+def deleteAll(remoteDBparams):
+
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+        
+    cur = conn.cursor()
+
+    cur.execute("SELECT ID FROM events;")
+    IDtuples = cur.fetchall()
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    for eventID in IDtuples:
+        delete(eventID[0], remoteDBparams)
+
+    return 0
+
+
+def dailySchedule(date, remoteDBparams, passFlag):
     conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
                             password=remoteDBparams["password"],
                             host=remoteDBparams["host"], port=remoteDBparams["port"])
@@ -209,10 +283,6 @@ def dailySchedule(date, remoteDBparams):
 
     for eventID in listID:
         dailyEvents[eventID] = {}
-        # eventInfo = {}
-
-        cur.execute("SELECT name FROM events WHERE ID = %s;",(eventID,))
-        dailyEvents[eventID]["name"] = cur.fetchone()[0]
 
         cur.execute("SELECT cost FROM events WHERE ID = %s;",(eventID,))
         dailyEvents[eventID]["cost"] = cur.fetchone()[0]
@@ -220,24 +290,14 @@ def dailySchedule(date, remoteDBparams):
         cur.execute("SELECT ticketTot FROM events WHERE ID = %s;",(eventID,))
         dailyEvents[eventID]["ticketNum"] = cur.fetchone()[0]
 
+        cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
+        dailyEvents[eventID]["ticketLeft"] = cur.fetchone()[0]
+
         cur.execute(sql.SQL("SELECT startTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
         dailyEvents[eventID]["startTime"] = cur.fetchone()[0]
 
         cur.execute(sql.SQL("SELECT endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
         dailyEvents[eventID]["endTime"] = cur.fetchone()[0]
-
-        tableInfo = "info "+str(eventID)
-        types = ("EN","IT","PL","URLs")
-
-        for infoType in types:
-            cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(infoType,))
-            info = cur.fetchall()
-            text = ""
-            for i in range(0,len(info)):
-                for j in range(0,len(info)):
-                    if info[j][1] == i:
-                        text = text + info[j][0]
-            dailyEvents[eventID][infoType] = text
 
     conn.commit()
     cur.close()
@@ -263,30 +323,6 @@ def ticketRetrieve(eventID, eMail, remoteDBparams):
         return None
     cur.execute(sql.SQL("UPDATE {} SET eMail = %s WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
 
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    return password
-
-
-def gateAccess(eventID, password, remoteDBparams):
-
-    conn = psycopg2.connect(dbname="dbuwxucc",user="dbuwxucc",password="VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
-        host="kandula.db.elephantsql.com",port="5432")
-        
-    cur = conn.cursor()
-
-    tablePass = "password "+str(eventID)
-    
-    cur.execute(sql.SQL('SELECT usedFlag FROM {} WHERE password = %s;').format(sql.Identifier(tablePass)),(password,))
-    flag = cur.fetchone()[0]
-    if flag:
-        print("Error: ticket already used.")
-        return [-1]
-
-    cur.execute(sql.SQL("UPDATE {} SET usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(password,))
-
     cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
     ticketNum = cur.fetchone()[0] - 1
 
@@ -296,4 +332,20 @@ def gateAccess(eventID, password, remoteDBparams):
     cur.close()
     conn.close()
 
-    return eventID  
+    return password
+
+def ticketLeftCheck(eventID, remoteDBparams):
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+        
+    cur = conn.cursor()
+
+    cur.execute("SELECT ticketLeft FROM events where ID = %s;",(eventID,))
+    ticketLeft = cur.fetchone()[0]
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return ticketLeft
