@@ -11,6 +11,10 @@ catalogData = None
 class GateMQTT(PswMQTTClient):
 
     def ticketCheck(self, eventID, psw):
+        # RETURN VALUES:
+        # 0: password accepted and sent to other gates to set them as used
+        # -1: eventID not in table, psw not in eventID psw list or it has been used already, curr time>endTime for event
+        # 1: current time< startTime for event
         # check if the eventID is scheduled for current time
         # then check if the password is in the list and if it is not used
 
@@ -23,18 +27,24 @@ class GateMQTT(PswMQTTClient):
         if start is None or end is None:
             if self.DEBUG:
                 print(f"event:{eventID} not found in psw table")
-            return False  # eventID not found in table
+            return -1  # eventID not found in table
         eventStart = currTime.replace(hour=start[0], minute=start[1])
         eventEnd = currTime.replace(hour=end[0], minute=end[1])
-        if not(eventStart < currTime < eventEnd):
+        if eventStart > currTime:
             if self.DEBUG:
-                print(f"event:{eventID} is not scheduled for current time")
-            return False  # event is not happening at current time
+                print(f"event:{eventID} start is scheduled for {eventStart.strftime('%H:%M')} now it's "
+                      f"{currTime.strftime('%H:%M')}")
+            return 1  # event is not happening at current time
+        if eventEnd < currTime:
+            if self.DEBUG:
+                print(f"event:{eventID} end was scheduled for {eventEnd.strftime('%H:%M')} now it's "
+                      f"{currTime.strftime('%H:%M')}")
+            return -1
         if self.setPswUsedFromScan(eventID, psw):
             # password was not used
             self.sendPswUsed(eventID, psw)
         else:
-            return False
+            return -1
             # password is used or not present in the eventID list
         return True
 
@@ -86,6 +96,7 @@ class GateSystem:
             _, frame = self.cap.read()
             lastcheckedStr = ""
             decodedObjects = pyzbar.decode(frame)
+            retryCount = 0
             for obj in decodedObjects:
                 skip = False
                 ticketJSON = obj.data.decode('utf-8')# expected format: {"eventID": eventID, "psw": password}
@@ -103,8 +114,15 @@ class GateSystem:
                             print("JSON string doesn't have the correct keys")
                             skip = True
                         if not skip:
-                            self.MQTT.ticketCheck(eventID, psw)
-                    lastcheckedStr = ticketJSON
+                            retVal = self.MQTT.ticketCheck(eventID, psw)
+                            if retVal == 0 or retVal == -1:
+                                # psw has been processed or is invalid
+                                # stop processing this json str
+                                lastcheckedStr = ticketJSON
+                            if retVal == 1:
+                                # event hasn't started yet
+                                # display message with starting time of event
+                                pass
                 print("Decoded data", obj.data.decode('utf-8'), type(obj.data.decode('utf-8')))  # byte type
                 # cv2.putText(frame, str(obj.data), (50, 50), font, 2,(255, 0, 0), 3)
 
@@ -118,4 +136,9 @@ if __name__ == '__main__':
     # GET request to main system for daily table
     # instatiate class and start MQTT client
     # start camera loop
+
+    debugTimeStr = "12-10-2020 12:30"
+    currTime = datetime.strptime(debugTimeStr, "%d-%m-%Y %H:%M")  # dd-mm-yyyy hh-mm
+    print(currTime.strftime("%H:%M"))
     pass
+
