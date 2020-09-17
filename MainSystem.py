@@ -150,18 +150,13 @@ class MainSystemMQTT(PswMQTTClient):
 
     def myOnMessageReceived(self, client, userdata, msg):
         global DEBUG
+        global dailyEventsPswTable
         # main system won't subscribe to newPswTable topic
         if msg.topic == self.msgTopics["newPsw"]:
             # ADD THE ENTRY INSIDE THE PASSWORD TABLE
             newPswDict = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.addPswEntry(newPswDict)
-                if DEBUG:  # global debug variable
-                    print(f"setting psw: {newPswDict['psw']} of event: {newPswDict['eventID']} as used")
-                    for psw in dailyEventsPswTable[str(newPswDict['eventID'])]["pswTable"]:
-                        if psw["psw"] == newPswDict['psw']:
-                            print("psw entry in list:", psw)
-                            break
             except:
                 print("Received newPsw message with bad body format or for eventID not present in the table")
         elif msg.topic == self.msgTopics["pswUsed"]:
@@ -169,6 +164,13 @@ class MainSystemMQTT(PswMQTTClient):
             usedPswDict = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.setPswUsed(usedPswDict)
+                dailyEventsPswTable = self.pswTable
+                if DEBUG:  # global debug variable
+                    print(f"setting psw: {usedPswDict['psw']} of event: {usedPswDict['eventID']} as used")
+                    for psw in dailyEventsPswTable[str(usedPswDict['eventID'])]["pswTable"]:
+                        if psw["psw"] == usedPswDict['psw']:
+                            print("psw entry in list:", psw)
+                            break
             except:
                 print("Received usedPsw message with bad body format")
 
@@ -185,13 +187,13 @@ class JobSchedulerThread(threading.Thread):
         global dailyEventsPswTable
         threading.Thread.__init__(self)
         self.requestTime = Rtime
-
+        subTopics = catalogData.topics["pswUsed"]
         # start MQTT client
         self.MQTTClient = MainSystemMQTT(clientID="MainSystem", brokerPort=int(catalogData.broker["port"]),
                                          MQTTbroker=catalogData.broker["ip"], msgTopics=catalogData.topics,
                                          subscribedTopics=subTopics, initialPswTable=dailyEventsPswTable)
         try:
-            self.MQTTClient.start() # TEMPORARELY DISABLE BECAUSE test.mosquitto.org is down
+            self.MQTTClient.start()  # TEMPORARELY DISABLE BECAUSE test.mosquitto.org is down
         except:
             raise Exception("Could not start MQTT client, check if the configuration is correct")
         self.on = True
@@ -213,9 +215,14 @@ class JobSchedulerThread(threading.Thread):
             value = event[1]
             tmpDict[str(eventID)] = {"startTime": value["startTime"], "endTime": value["startTime"], "pswTable":[]}
 
+        # ADDING A PASSWORD FOR DEBUG
+        testPSWentry_d = {"psw": '5', "used": False}
+        tmpDict['8']['pswTable'].append(testPSWentry_d)
+
         # {“eventID”:{“startTime”:, “endTime”:, “pswTable”:, }
         # update daily event list
         dailyEventsPswTable = tmpDict
+        self.MQTTClient.pswTable = dailyEventsPswTable  # update MQTT client table
         print("received daily event table: ", dailyEventsPswTable)
 
 

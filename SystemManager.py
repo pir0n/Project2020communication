@@ -224,4 +224,6 @@ if __name__ == "__main__":
     UI.cmdConsole()
     # -addEvent 12-10-2020 13:30 15:00 -f eventInfo.json, gave eventID = 6
     # -addEvent 12-10-2020 16:30 18:00 -f eventInfo.json, gave eventID = 5
+    # -addEvent 12-10-2020 10:30 13:00 -f eventInfo.json, gave eventID = 7 (only 1 ticket)
+    # -addEvent 12-10-2020 10:30 13:00 -f eventInfo.json, gave eventID = 8 (100 ticket)
 

@@ -1,5 +1,5 @@
 {
-  "nTickets": 20,
+  "nTickets": 100,
   "price": 10.55,
   "URLs": ["testurl1", "testurl2"],
   "info": {
