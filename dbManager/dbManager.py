@@ -266,7 +266,7 @@ def deleteAll(remoteDBparams):
     return 0
 
 
-def dailySchedule(date, remoteDBparams, passFlag):
+def dailySchedule(date, remoteDBparams):
     conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
                             password=remoteDBparams["password"],
                             host=remoteDBparams["host"], port=remoteDBparams["port"])
