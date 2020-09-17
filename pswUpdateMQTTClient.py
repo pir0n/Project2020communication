@@ -1,7 +1,7 @@
 from MQTTClient import MQTT_client
 import json
 import time
-
+import traceback
 
 class PswMQTTClient(MQTT_client):
     DEBUG = False
@@ -18,8 +18,9 @@ class PswMQTTClient(MQTT_client):
 
     def myOnMessageReceived(self, client, userdata, msg):
         # main system won't subscribe to newPswTable topic
+
+        # ADD THE ENTRY INSIDE THE PASSWORD TABLE
         if msg.topic == self.msgTopics["newPsw"]:
-            # ADD THE ENTRY INSIDE THE PASSWORD TABLE
             newPswDict = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.addPswEntry(newPswDict)
@@ -28,15 +29,20 @@ class PswMQTTClient(MQTT_client):
                     print(f'psw list for {str(newPswDict["eventID"])}: {self.pswTable[str(newPswDict["eventID"])]["pswTable"]}')
             except:
                 print("Received newPsw message with bad body format or for eventID not present in the table")
+
+        # SET SPECIFIED PASSWORD AS USED
         elif msg.topic == self.msgTopics["pswUsed"]:
-            # SET SPECIFIED PASSWORD AS USED
             usedPswDict = json.loads(msg.payload.decode('utf-8'))
+            if self.DEBUG:
+                print("received payload: ", usedPswDict)
             try:
                 self.setPswUsed(usedPswDict)
             except:
                 print("Received usedPsw message with bad body format")
+                traceback.print_exc()
+
+                # OVERWRITE PSW TABLE
         elif msg.topic == self.msgTopics["newPswTable"]:
-            # OVERWRITE PSW TABLE
             newPswTable = json.loads(msg.payload.decode('utf-8'))
             try:
                 self.setPswTable(newPswTable)
@@ -44,6 +50,8 @@ class PswMQTTClient(MQTT_client):
                     print("received newPswTable msg, updated psw table: ", self.pswTable)
             except:
                 print("Received newPswTable message with bad table format")
+                traceback.print_exc()
+
 
     def addPswEntry(self, newPswDict):
         # msg format : {"eventID":, "psw":}
@@ -55,18 +63,23 @@ class PswMQTTClient(MQTT_client):
         else:
             raise KeyError(f"incorrect data format")
 
+
     def setPswUsed(self, usedPswDict):
         # msg format : {"eventID":, "psw":}
         if "eventID" in usedPswDict and "psw" in usedPswDict:
             if usedPswDict["eventID"] in self.pswTable:
                 found = False
-                for psw in self.pswTable[usedPswDict["eventID"]]:  # search in the psw list
-                    if usedPswDict["psw"] == psw["psw"]:
-                        psw["used"] = True
-                        found = True
-                        if self.DEBUG:
-                            print(f"setting psw: {psw['psw']} of event: {usedPswDict['eventID']} as used")
-                        break
+                for psw in self.pswTable[usedPswDict["eventID"]]["pswTable"]:  # search in the psw list
+                    try:
+                        if usedPswDict["psw"] == psw["psw"]:
+                            psw["used"] = True
+                            found = True
+                            if self.DEBUG:
+                                print(f"setting psw: {psw['psw']} of event: {usedPswDict['eventID']} as used")
+                            break
+                    except:
+                        print(f"usedPswDict['psw']: {usedPswDict}, psw['psw']:{psw}")
+                        raise Exception
                 if not found:
                     print(f"password {usedPswDict['psw']} not found in {usedPswDict['eventID']} list")
             else:
@@ -87,12 +100,17 @@ class PswMQTTClient(MQTT_client):
         self.pswTable.clear()
         self.pswTable = newPswTable
 
+
 if __name__=="__main__":
     # test psw used command
     msgTopics = {"newPsw": "pswTable/newPsw", "newPswTable": "pswTable/newTable", "pswUsed": "pswTable/pswUsed"}
-    test2 = PswMQTTClient("gateTest1", "test.mosquitto.org", msgTopics= msgTopics, subscribedTopics = ["pswTable/newPsw", "pswTable/newTable"])
+    test2 = PswMQTTClient("gateTest1", "test.mosquitto.org", msgTopics= msgTopics, subscribedTopics = ["pswTable/newPsw", "pswTable/newTable", "pswTable/pswUsed"])
     test2.DEBUG = True
     test2.start()
-    pswUsed = {"eventID": '8', "psw": '5'}
+    pswUsedJSON = {"eventID": '8', "psw": '5'}
+    jsonPayload = json.dumps(pswUsedJSON)
+    print(jsonPayload)
     time.sleep(10)
-    test2.publish("pswTable/pswUsed", json.dumps(pswUsed))
+    test2.publish("pswTable/pswUsed", jsonPayload)
+    while 1:
+        pass
