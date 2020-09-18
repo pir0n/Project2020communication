@@ -100,8 +100,8 @@ def add(date, startTime, endTime, ticketNum, cost, remoteDBparams):
     else:
         eventID = 0
 
-    # ID, name, date, tickets_tot, tickets_left, cost
-    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s, %s);",(eventID,name,date,ticketNum,ticketNum,cost))
+    # ID, date, tickets_tot, tickets_left, cost
+    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s, %s);",(eventID,date,ticketNum,ticketNum,cost))
 
     cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(dateName)),(eventID,startTime,endTime))
 
@@ -259,6 +259,8 @@ def deleteAll(remoteDBparams):
     conn.commit()
     cur.close()
     conn.close()
+    
+    
 
     for eventID in IDtuples:
         delete(eventID[0], remoteDBparams)
@@ -266,7 +268,7 @@ def deleteAll(remoteDBparams):
     return 0
 
 
-def dailySchedule(date, remoteDBparams):
+def dailySchedule(date, passFlag, remoteDBparams):
     conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
                             password=remoteDBparams["password"],
                             host=remoteDBparams["host"], port=remoteDBparams["port"])
@@ -275,13 +277,11 @@ def dailySchedule(date, remoteDBparams):
     
     cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
     IDtuples = cur.fetchall()
-    listID = []
-    for couple in IDtuples:
-        listID.append(couple[0])
 
     dailyEvents = {}
 
-    for eventID in listID:
+    for couple in tuplesID:
+        eventID = couple[0]
         dailyEvents[eventID] = {}
 
         cur.execute("SELECT cost FROM events WHERE ID = %s;",(eventID,))
@@ -298,6 +298,41 @@ def dailySchedule(date, remoteDBparams):
 
         cur.execute(sql.SQL("SELECT endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
         dailyEvents[eventID]["endTime"] = cur.fetchone()[0]
+
+        if passFlag:
+            tablePass = "password "+str(eventID)
+            cur.execute(sql.SQL("SELECT password, eMail FROM {} WHERE usedFlag = true;").format(sql.Identifier(tablePass)))
+            dailyEvents[eventID]["passTable"] = cur.fetchall()
+        else:
+            tableInfo = "info "+str(eventID)
+            types = ("EN","IT","PL",)
+
+            for infoType in types:
+                dailyEvents[eventID][infoType] = {}
+
+                tempType = "name"+infoType
+                cur.execute(sql.SQL("SELECT text FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(tempType,))
+                dailyEvents[eventID][infoType]["name"] = cur.fetchone()[0]
+                
+                tempType = "info"+infoType
+                cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(tempType,))
+                info = cur.fetchall()
+                text = ""
+                for i in range(0,len(info)):
+                    for j in range(0,len(info)):
+                        if info[j][1] == i:
+                            text = text + info[j][0]
+                dailyEvents[eventID][infoType]["info"] = text
+
+            tempType = "URLs"
+            cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(tempType,))
+            urls = cur.fetchall()
+            urlsList = []
+            for i in range(0,len(urls)):
+                for j in range(0,len(urls)):
+                    if urls[j][1] == i:
+                        urlsList.append(urls[j][0])
+            dailyEvents[eventID][tempType] = urlsList
 
     conn.commit()
     cur.close()
@@ -322,6 +357,7 @@ def ticketRetrieve(eventID, eMail, remoteDBparams):
     except:
         return None
     cur.execute(sql.SQL("UPDATE {} SET eMail = %s WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
+    cur.execute(sql.SQL("UPDATE {} SET usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(password,))
 
     cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
     ticketNum = cur.fetchone()[0] - 1
@@ -349,3 +385,23 @@ def ticketLeftCheck(eventID, remoteDBparams):
     conn.close()
 
     return ticketLeft
+
+
+def dBReset(remoteDBparams):
+
+    deleteAll(remoteDBparams)
+
+    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
+                            password=remoteDBparams["password"],
+                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+        
+    cur = conn.cursor()
+
+    cur.execute('DROP TABLE events')
+    cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return 0
