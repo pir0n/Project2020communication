@@ -9,16 +9,18 @@ import traceback
 remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
                    "host": "kandula.db.elephantsql.com", "port": "5432"}
 
-class SystemManagerInterface:
-    expectedEventKeys = ["nTickets", "price", "info", "URLs"]
-    expectedEventInfoKeys = {"languages": ["IT", "EN", "PL"], "info": ["name", "desc"]}
 
+class SystemManagerInterface:
+    expectedEventKeys = ["nTickets", "price", "info"]
+    expectedEventInfoKeys = {"languages": ["IT", "EN", "PL"], "info": ["name", "info"]}
+    timeInputDBformat = "%H:%M"  # hh:mm 0-padded
     # eventFile: json format file, {"event"}
     # commands:
     # printEvents DD/MM/YYYY [LIST OF LANGUAGES] # print events data of specified date, info is printed in given languages
     # addEvent date startTIme endTime -f FileName # event info is taken from file FileName
     # addEvent date startTIme endTime -m # event info will be inserted manually
     # -exit to exit the script
+
     def __init__(self, configFile=None):
         # TO-DO: get configuration from file
         # with open(configFile, "r") as config:
@@ -41,6 +43,11 @@ class SystemManagerInterface:
             elif queryString.startswith("-deleteEvent"):
                 cmdArgs = queryString.split()
                 self.deleteEvent(cmdArgs)
+            elif queryString == "-deleteALL":
+                self.deleteAllEvents()
+            elif queryString.startswith("-deleteDate"):
+                cmdArgs = queryString.split()
+                self.delateAllEventsFromDate(cmdArgs)
             elif queryString == "-exit":
                 print("Exiting application")
                 self.stop = True
@@ -49,10 +56,13 @@ class SystemManagerInterface:
 
     def printCmd(self):
         print("Command strings\n"
-              "Adding events with info taken from JSON file: -addEvent date startTIme endTime -f FileName\n"
-              "Adding events with info inserted manually: -addEvent date startTIme endTime -m\n"
-              "Printing all events scheduled for specified date: -printEvents date\n"
-              "Deleting an event: -deleteEvent eventID")
+              "Add event with info taken from JSON file: -addEvent date startTIme endTime -f FileName\n"
+              "Add event with info inserted manually: -addEvent date startTIme endTime -m\n"
+              "Print all events scheduled for specified date: -printEvents date\n"
+              "Delet an event using its id: -deleteEvent eventID\n"
+              "Delete all events scheduled for the specified date: -deleteDate date\n"
+              "Delete all events in the database: -deleteALL\n"
+              "Exit the program: -exit")
 
     def printEvents(self, cmdArgs):
         global remoteDBparams
@@ -60,12 +70,12 @@ class SystemManagerInterface:
             dateStr = cmdArgs[1]
         except:
             print("Error: input string does not have enough arguments, follow this command format to print events:\n"
-                  "[ printEvents date ]")
+                  "[ -printEvents date ]")
             return
         eventDate = self.getDate(dateStr)  # returns date object
         if eventDate is None:  # dateStr had incorrect format
             return
-        eventList = dbManager.dailySchedule(eventDate, remoteDBparams)
+        eventList = dbManager.dailySchedule(eventDate, passFlag=False, remoteDBparams=remoteDBparams)
         print(eventList)
 
     # cmdArgs is a list of arguments for the command
@@ -89,7 +99,7 @@ class SystemManagerInterface:
         if eventDate is None:  # dateStr had incorrect format
             return
         # time
-        startTime, endTime = self.getEventTime(startTimeStr, endTimeStr)
+        startTime, endTime = self.getEventTime(startTimeStr, endTimeStr)  # returns 2 datetime objects
         if startTime is None or endTime is None:
             return
 
@@ -115,7 +125,7 @@ class SystemManagerInterface:
                 if not(expectedKey in jsonDict):
                     print(f"Error: {expectedKey} not present in the json file")
                     return
-                if expectedKey == "cost": # check if numerical keys are correct
+                if expectedKey == "cost":  # check if numerical keys are correct
                     if expectedKey == "cost" and (jsonDict[expectedKey] is not int or jsonDict[expectedKey] is not float):
                         print(f'Error: value of "{expectedKey}" should be an integer or a float')
                 if expectedKey == "nTickets" and type(jsonDict[expectedKey]) is not int:
@@ -131,6 +141,10 @@ class SystemManagerInterface:
                     if not(expectedInfoKey in jsonDict["info"][expectedLanguage]):
                         print(f"Error: key {expectedInfoKey} is missing for language {expectedLanguage}")
                         return
+            # check if the there is the URL list
+            if "URLs" not in jsonDict["info"]:
+                print(f'Error: key "URLs" is missing in the dictionary of the "info" value field')
+                return
             # if all format checks are passed, store the dictionary in eventInfoDict
             eventInfoDict = jsonDict
 
@@ -148,9 +162,9 @@ class SystemManagerInterface:
 
         # ACCESS DATABASE THROUGH APIs
         # create DB entry for event
-        eventID = dbManager.add(eventDate, startTime=startTime, endTime=endTime, name=eventInfoDict["info"]["EN"]["name"],
-                                cost=eventInfoDict["price"], ticketNum=eventInfoDict["nTickets"],
-                                remoteDBparams=remoteDBparams)
+        eventID = dbManager.add(eventDate, startTime=startTime.strftime(self.timeInputDBformat),
+                                endTime=endTime.strftime(self.timeInputDBformat), cost=eventInfoDict["price"],
+                                ticketNum=eventInfoDict["nTickets"], remoteDBparams=remoteDBparams)
         if eventID == -1:
             print("Error: could not add event to database")
             return
@@ -159,10 +173,9 @@ class SystemManagerInterface:
         dbManager.passwordFill(eventID, passwordList, remoteDBparams=remoteDBparams)
         # insert event description and img URLs
         # eventDict = eventInfoDict["info"]
-        eventDict = {"EN": eventInfoDict["info"]["EN"]["desc"], "IT": eventInfoDict["info"]["IT"]["desc"],
-                     "PL": eventInfoDict["info"]["PL"]["desc"]}
-        eventDict["URLs"] = eventInfoDict["URLs"]
-        dbManager.infoFill(eventID, eventDict, remoteDBparams=remoteDBparams)
+        eventDict = eventInfoDict["info"]
+        # eventDict must have format {"EN":{"name":, "info":}, "URLs":[]}
+        dbManager.infoFill(eventID, eventInfo=eventDict, remoteDBparams=remoteDBparams)
         print(f"Event successfully inserted in database with eventID = {eventID}")
 
     def deleteEvent(self, cmdArgs):
@@ -204,26 +217,74 @@ class SystemManagerInterface:
             print("Error: time format, start and end time should have format hh:mm or hh:mm:ss")
             return None, None
         try:
-            startT = int(startT_list[0])
-            endT = int(endT_list[0])
+            startH = int(startT_list[0])
+            endH = int(endT_list[0])
+            startM = int(startT_list[1])
+            endM = int(endT_list[1])
         except:
             print("Error: specified hours for end and start time are not valid numbers")
             return None, None
-        if (23 >= startT >= 0) and (23 >= endT >= 0):
-            if startT > endT:
-                print("Error: specified hour for start time is larger than the one for end time")
-                return None, None
-        else:
+        currTime = datetime.datetime.now()
+        try:
+            eventStart = currTime.replace(hour=startH, minute=startM)
+            eventEnd = currTime.replace(hour=endH, minute=endM)
+        except ValueError:
             print("Error: specified hours for end and start time are out of bounds")
-            return None, None
-        return startT, endT  # return only the hour, will be changed in the future
+            return
+        except:
+            print("Error: unexpected exception when creating datetime object for start and end time of the event")
+            return
+        if eventStart >= eventEnd:
+            print("Error: specified event starting time is equal or after the specified ending time")
+        return eventStart, eventEnd  # a couple of datetime objects
 
+    def deleteAllEvents(self):
+        global remoteDBparams
+        print("WARNING: you will delete all scheduled events and their information contained the database\n")
+        answer = input("THIS ACTION CANNOT BE UNDONE, delete all events? (y/n)")
+        stop = False
+        while not stop:
+            if answer == "y":
+                # RIP events
+                print("deleting events...")
+                dbManager.deleteAll(remoteDBparams)
+                print("all events have successfully erased from the database")
+                stop = True
+            elif answer == "n":
+                stop = True
+            else:
+                print("invalid string, type 'y' to delete events 'n' to go back")
+            answer = input()
+
+    def delateAllEventsFromDate(self, cmdArgs):
+        global remoteDBparams
+        try:
+            dateStr = cmdArgs[1]
+        except:
+            print("Error: input string does not have enough arguments, follow this command format:\n"
+                  "[ -deleteDate date ]")
+            return
+        # date format
+        eventDate = self.getDate(dateStr)  # returns date object
+        if eventDate is None:  # dateStr had incorrect format
+            return
+        print(f"WARNING: you will delete all scheduled events for date: {eventDate}\n")
+        answer = input("THIS ACTION CANNOT BE UNDONE, delete all events? (y/n)")
+        stop = False
+        while not stop:
+            if answer == "y":
+                # RIP events
+                print("deleting events...")
+                dbManager.deleteDate(eventDate, remoteDBparams)
+                print(f"all events scheduled date: {eventDate} have successfully erased from the database")
+                stop = True
+            elif answer == "n":
+                stop = True
+            else:
+                print("invalid string, type 'y' to delete events 'n' to go back")
+            answer = input()
 
 if __name__ == "__main__":
     UI = SystemManagerInterface()
     UI.cmdConsole()
-    # -addEvent 12-10-2020 13:30 15:00 -f eventInfo.json, gave eventID = 6
-    # -addEvent 12-10-2020 16:30 18:00 -f eventInfo.json, gave eventID = 5
-    # -addEvent 12-10-2020 10:30 13:00 -f eventInfo.json, gave eventID = 7 (only 1 ticket)
-    # -addEvent 12-10-2020 10:30 13:00 -f eventInfo.json, gave eventID = 8 (100 ticket)
-
+    # -addEvent 12-10-2020 10:30 13:00 -f eventInfo.json
