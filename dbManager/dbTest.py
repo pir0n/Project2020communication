@@ -1,14 +1,18 @@
-import dbManager.dbManager as dbManager
+import dbManager as dbManager
 import datetime
 
 date = datetime.date(2020,12,8)
-startTime = 15
-endTime = 20
+startTime = "15:00"
+endTime = "20:00"
 name = "Immacolata"
 ticketNum = 100
 cost = 10
-
-eventID = dbManager.add(date, startTime, endTime, name, ticketNum, cost)
+remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
+                    "host": "kandula.db.elephantsql.com", "port": "5432"}
+dbManager.dBReset(remoteDBparams)
+ #eventID = dbManager.add(date, startTime, endTime, ticketNum, cost,remoteDBparams)
+print(eventID)
+input()
 
 password = []
 for i in range(0,ticketNum):

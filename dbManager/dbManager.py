@@ -101,7 +101,7 @@ def add(date, startTime, endTime, ticketNum, cost, remoteDBparams):
         eventID = 0
 
     # ID, date, tickets_tot, tickets_left, cost
-    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s, %s);",(eventID,date,ticketNum,ticketNum,cost))
+    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s);",(eventID,date,ticketNum,ticketNum,cost))
 
     cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(dateName)),(eventID,startTime,endTime))
 
@@ -399,7 +399,6 @@ def dBReset(remoteDBparams):
 
     cur.execute('DROP TABLE events')
     cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
-
     conn.commit()
     cur.close()
     conn.close()
