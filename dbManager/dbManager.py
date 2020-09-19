@@ -95,13 +95,12 @@ def add(date, startTime, endTime, ticketNum, cost, remoteDBparams):
             eventID = newID - 1
         else:
             cur.execute("SELECT max(ID) FROM events;")
-            newID = cur.fetchone()
+            newID = cur.fetchone()[0]
             eventID = newID + 1
     else:
         eventID = 0
-
     # ID, date, tickets_tot, tickets_left, cost
-    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s);",(eventID,date,ticketNum,ticketNum,cost))
+    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s);", (eventID, date, ticketNum, ticketNum, cost))
 
     cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(dateName)),(eventID,startTime,endTime))
 
@@ -155,26 +154,26 @@ def infoFill(eventID, eventInfo, remoteDBparams):
 
         infoTemp = eventInfo[infoType]["name"]
         tempType = "name"+infoType
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,0))
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(infoTemp,tempType,0))
 
         flag = 0
         i = 0
         infoTemp = eventInfo[infoType]["info"]
         tempType = "info"+infoType
         while flag == 0:
-            if len(infoTemp)>255:
+            if len(infoTemp) > 255:
                 info = infoTemp[0:255]
                 cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,i))
                 i = i + 1
                 infoTemp = infoTemp[255:]
             else:
                 info = infoTemp
-                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,infoType,i))
+                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,i))
                 flag = 1
     
     i = 0
     tempType = "URLs"
-    for url in eventInfo[type]:
+    for url in eventInfo[tempType]:
         cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,tempType,i))
         i = i + 1
 
@@ -276,7 +275,7 @@ def dailySchedule(date, passFlag, remoteDBparams):
     cur = conn.cursor()
     
     cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
-    IDtuples = cur.fetchall()
+    tuplesID = cur.fetchall()
 
     dailyEvents = {}
 
@@ -399,6 +398,7 @@ def dBReset(remoteDBparams):
 
     cur.execute('DROP TABLE events')
     cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
+
     conn.commit()
     cur.close()
     conn.close()
