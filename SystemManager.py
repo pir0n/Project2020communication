@@ -284,7 +284,15 @@ class SystemManagerInterface:
                 print("invalid string, type 'y' to delete events 'n' to go back")
             answer = input()
 
+
 if __name__ == "__main__":
-    UI = SystemManagerInterface()
-    UI.cmdConsole()
-    # -addEvent 12-10-2020 10:30 13:00 -f eventInfo.json
+    # UI = SystemManagerInterface()
+    # UI.cmdConsole()
+    # -addEvent 12-10-2020 9:30 10:00 -f eventInfo.json (eventID=0)-9 tickets have been booked
+    # -addEvent 12-10-2020 11:15 13:30 -f eventInfo.json (eventID=1)
+
+    # DEBUG print
+    dateList = [12,10,2020]
+    testD = datetime.date(int(dateList[2]), int(dateList[1]), int(dateList[0]))
+    pswTable = dbManager.dailySchedule(testD, passFlag=True, remoteDBparams = remoteDBparams)
+    print(pswTable)

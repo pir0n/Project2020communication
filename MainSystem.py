@@ -29,6 +29,7 @@ remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_l
                    "host": "kandula.db.elephantsql.com", "port": "5432"}
 configFileName = "configFile.json"
 
+
 class VirtualTicketHandler:
     global dailyEvents
     global DEBUG  # set to True to print debug messages
@@ -38,21 +39,24 @@ class VirtualTicketHandler:
         self.imgPath = imagePath
         self.pdfPath = pdfPath
 
-    def pswToQr(self, password, filepath):
+    def pswToQr(self, password, eventID, filepath):
         # create a .png image of the psw encoded as qr code
+        ticketJSON = json.dumps({"eventID": eventID, "psw": password})
         if DEBUG:
-            print("encoding:", password)
-        QRpsw = pyqrcode.create(password)
+            print("encoding:", ticketJSON)
+        QRpsw = pyqrcode.create(ticketJSON)
         QRpsw.png(filepath+".png", scale=5, module_color=[0, 0, 0, 128], background=[0xff, 0xff, 0xcc])
 
-    def generatePDF(self, n_tickets):
+    def generatePDF(self, n_tickets, scheduledTime, eventName):
         pdf = FPDF()
         if DEBUG:
             print("creating pdf")
+
+        text = f"Virtual Ticket for event {eventName}, scheduled for time {scheduledTime[0]}-{scheduledTime[1]}"
         if n_tickets == 1:
             pdf.add_page()
             pdf.set_font("Arial", size=12)
-            pdf.cell(0, 10, txt="Virtual Ticket: ", ln=1, align="C")
+            pdf.cell(0, 10, txt=text, ln=1, align="C")
             pdf.image(self.imgPath+".png", x=48, y=30, w=100)
             # pdf.ln(85)  # move 85 down
             pdf.output(self.pdfPath)
@@ -61,14 +65,14 @@ class VirtualTicketHandler:
             while i < n_tickets:
                 pdf.add_page()
                 pdf.set_font("Arial", size=12)
-                pdf.cell(0, 10, txt="Virtual Ticket: ", ln=1, align="C")
+                pdf.cell(0, 10, txt=text, ln=1, align="C")
                 pdf.image(self.imgPath+str(i)+".png", x=48, y=30, w=100)
                 # pdf.ln(85)  # move 85 down
                 i += 1
             pdf.output(self.pdfPath)
 
     # NOTE: to speed things up, a connection can be established only once instead of each time
-    def sendMail(self, name, receiver_email, event):
+    def sendMail(self, name, receiver_email, event, n_tickets):
         if DEBUG:
             print("sending e-mail")
         mailAddress = "BookingSystemTest2@gmail.com"
@@ -81,10 +85,16 @@ class VirtualTicketHandler:
         with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
             server.login(mailAddress, psw)
             sender_email = mailAddress
-            subject = f"Virtual ticket for event: {event}"
-            body = f"""Dear {name},\n
-            Your Virtual Ticket for the event: -{event}- is in the pdf attached to this e-mail
-            """
+            if n_tickets == 1:
+                subject = f"Virtual ticket for event: {event}"
+                body = f"""Dear {name},\n
+                Your Virtual Ticket for the event: -{event}- is in the pdf attached to this e-mail
+                """
+            else:
+                subject = f"Virtual tickets for event: {event}"
+                body = f"""Dear {name},\n
+                Your Virtual Tickets for the event: -{event}- are in the pdf attached to this e-mail
+                """
             # Create a multipart message and set headers
             message = MIMEMultipart()
             message["From"] = sender_email
@@ -122,18 +132,18 @@ class VirtualTicketHandler:
                 server.sendmail(sender_email, receiver_email, text)
 
     # wrapper function
-    def sendTicket(self, name, mail_addr, event, passwordList):
+    def sendTicket(self, name, mail_addr, event, passwordList, eventID, scheduledtime):
         if type(passwordList) is list:
             i = 0
             for el in passwordList:
-                self.pswToQr(el, self.imgPath + str(i))  # generate a QR png for each psw
+                self.pswToQr(password=el, filepath=self.imgPath + str(i), eventID=eventID)  # generate a QR png for each psw
                 i += 1
-            self.generatePDF(len(passwordList))  # pdf with 1 page per ticket
+            self.generatePDF(len(passwordList), scheduledtime, event)  # pdf with 1 page per ticket
         else:
-            self.pswToQr(passwordList, self.imgPath)  # generate a png file in the directory
-            self.generatePDF(1)  # generate a pdf containing the QR png in the directory
+            self.pswToQr(password=passwordList, filepath=self.imgPath, eventID=eventID)  # generate a png file in the directory
+            self.generatePDF(1, scheduledtime, event)  # generate a pdf containing the QR png in the directory
 
-        self.sendMail(name, mail_addr, event)
+        self.sendMail(name, mail_addr, event, len(passwordList))
 
 
 class MainSystemMQTT(PswMQTTClient):
@@ -202,29 +212,36 @@ class JobSchedulerThread(threading.Thread):
     def getDailyTable(self):
         global dailyEventsPswTable
         global remoteDBparams
-        eventDate = datetime.date(2020, 10, 12) #12-10-2020, DEBUG DATE
+        eventDate = datetime.date(2020, 10, 12)  # 12-10-2020, DEBUG DATE
         # eventDate = datetime.date.today()
-        receivedDailyEvents = dbManager.dailySchedule(eventDate, remoteDBparams)
+        print("Retrieving daily table from database...")
+        receivedDailyEvents = dbManager.dailySchedule(eventDate, passFlag=True, remoteDBparams=remoteDBparams)
+        print("Daily table retrieved")
         # received dictionary:
         # {eventid: {'name':, 'cost':, 'ticketNum':, 'startTime':, 'endTime':, 'EN':,
         #      'IT':, 'PL':, 'URLs': '{testurl1,testurl2}'}
         # WARNING: pswTable is not present in the DB returned dict
         tmpDict = {}
+        pswList = []
         for event in list(receivedDailyEvents.items()):
-            eventID = event[0]
+            eventID = str(event[0])  # eventID always cast as string
             value = event[1]
-            tmpDict[str(eventID)] = {"startTime": value["startTime"], "endTime": value["startTime"], "pswTable":[]}
+            pswList.clear()
+            for psw in value["passTable"]:
+                # list of el with format: [psw, email]
+                pswList.append({"psw": psw[0], "used": False})
+            # important: insert psw list by values
+            tmpDict[eventID] = {"startTime": value["startTime"], "endTime": value["endTime"], "pswTable": pswList[:]}
 
         # ADDING A PASSWORD FOR DEBUG
-        testPSWentry_d = {"psw": '5', "used": False}
-        tmpDict['8']['pswTable'].append(testPSWentry_d)
+        # testPSWentry_d = {"psw": '5', "used": False}
+        # tmpDict['8']['pswTable'].append(testPSWentry_d)
 
         # {“eventID”:{“startTime”:, “endTime”:, “pswTable”:, }
         # update daily event list
         dailyEventsPswTable = tmpDict
         self.MQTTClient.pswTable = dailyEventsPswTable  # update MQTT client table
         print("received daily event table: ", dailyEventsPswTable)
-
 
     def startSchedule(self, Rtime=None):
         if Rtime is not None:
@@ -254,6 +271,7 @@ class JobSchedulerThread(threading.Thread):
         global catalogData
         self.getDailyTable()
         self.MQTTClient.publish(catalogData.topics["newPswTable"], json.dumps(dailyEventsPswTable))
+        # TO-DO: ADD DB API CALL TO REMOVE TABLE FROM PREVIOUS DAY
 
 
 # RESTful interface exposed through cherrypy
@@ -292,12 +310,13 @@ class MainSystemREST(object):
         global dailyEventsPswTable
         # requests URL formats:
         # used for commands sent by the GUI(user side) or the system management interface that request a resource
+        # gates can also call a GET req to retrieve the daily psw table
         if len(uri) != 0:
             if uri[0] == "customer":
                 if uri[1] == "Events":
                     # return list of daily events
                     if uri[2] == "EN" or uri[2] == "IT" or uri[2] == "PL":
-                        language = uri[2]  # EN,IT or PL
+                        language = uri[2]  # EN, IT or PL
                     else:
                         raise cherrypy.HTTPError(404, "invalid URL")
                     outputEventsList = []  # list of dictionaries
@@ -314,12 +333,16 @@ class MainSystemREST(object):
                     raise cherrypy.HTTPError(404, "incorrect URL")
             if DEBUG:
                 print("GET request received")
-            if uri[0] == "gate": # requests made by the gate
+            if uri[0] == "gate":  # requests made by the gate
                 if uri[1] == "pswTable":
                     if dailyEventsPswTable is None:
                         raise cherrypy.HTTPError(500, "daily event table is empty")
                     else:
-                        raise json.dumps(dailyEventsPswTable)
+                        return json.dumps(dailyEventsPswTable)
+                else:
+                    raise cherrypy.HTTPError(404, "invalid url")
+            else:
+                raise cherrypy.HTTPError(404, "invalid url")
 
     def PUT(self, *uri, **param):
         global remoteDBparams
@@ -328,7 +351,6 @@ class MainSystemREST(object):
         global catalogData
         # sent by GUI or system interface to request an action
         if len(uri) != 0:
-
             # customer services
             if uri[0] == "customer":
                 if uri[1] == "newTicket":  # return the chosen password
@@ -347,22 +369,29 @@ class MainSystemREST(object):
                     except:
                         raise cherrypy.HTTPError(500, "could not load JSON string in body")
                     # check format of body
-                    if not("name" in Reqdict.keys() and "eMail" in Reqdict.keys() and "event_name" in Reqdict.keys() \
-                            and "eventID" in Reqdict.keys() and "n_tickets" in Reqdict.keys()):
+                    if not("name" in Reqdict and "eMail" in Reqdict and "event_name" in Reqdict and "eventID" in Reqdict
+                           and "n_tickets" in Reqdict and "start" in Reqdict) and "end" in Reqdict:
                         raise cherrypy.HTTPError(500, "invalid request format")
                     # send eventID, timeslot, e-mail, n_tickets to DB, DB returns n passwords (JSON  list)
 
                     # ACCESS DB THROUGH APIs
                     if int(Reqdict["n_tickets"]) > 1:
+                        # DB API CALL
+                        ticket_remaining = int(dbManager.ticketLeftCheck(Reqdict["eventID"], remoteDBparams))
+                        if int(Reqdict["n_tickets"]) > ticket_remaining:
+                            return "no ticket available"
                         sel_psw = []
                         for i in range(0, Reqdict["n_tickets"]):
-                            returnVal = dbManager.ticketRetrieve(Reqdict["eventID"], Reqdict["eMail"],
-                                                               remoteDBparams)
+                            returnVal = dbManager.ticketRetrieve(Reqdict["eventID"], Reqdict["eMail"], remoteDBparams)
                             if returnVal is None:
                                 break  # no more tickets
-                                #return sel_psw
+                                # return sel_psw
                             sel_psw.append(returnVal)
                     else:
+                        # DB API CALL
+                        ticket_remaining = int(dbManager.ticketLeftCheck(Reqdict["eventID"], remoteDBparams))
+                        if ticket_remaining == 0:
+                            return "no ticket available"
                         sel_psw = dbManager.ticketRetrieve(int(Reqdict["eventID"]), Reqdict["eMail"], remoteDBparams)
                         # NOTE: eventID is an int for now, might change in future
                         if sel_psw is None:
@@ -373,7 +402,7 @@ class MainSystemREST(object):
 
                     print("sending psw list:", sel_psw)
                     self.virtualTicketHandler.sendTicket(Reqdict["name"], Reqdict["eMail"], Reqdict["event_name"],
-                                                         sel_psw)
+                                                         sel_psw, Reqdict["eventID"], (Reqdict["start"], Reqdict["end"]))
 
                     # insert password in daily table and send to gates IF the event is in daily table
                     if str(Reqdict["eventID"]) in dailyEventsPswTable:  # check if event in daily table
@@ -447,6 +476,7 @@ class MainSystemREST(object):
 
             else:
                 raise cherrypy.HTTPError(404, "invalid url")
+
 
 if __name__ == '__main__':
     # open configuration file

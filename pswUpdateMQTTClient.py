@@ -16,6 +16,11 @@ class PswMQTTClient(MQTT_client):
         if initialPswTable is not None:
             self.pswTable = initialPswTable
 
+    def start(self):
+        MQTT_client.start(self)
+        if self.DEBUG:
+            print("MQTT client started with initial psw Table:", self.pswTable)
+
     def myOnMessageReceived(self, client, userdata, msg):
         # main system won't subscribe to newPswTable topic
 
@@ -52,7 +57,6 @@ class PswMQTTClient(MQTT_client):
                 print("Received newPswTable message with bad table format")
                 traceback.print_exc()
 
-
     def addPswEntry(self, newPswDict):
         # msg format : {"eventID":, "psw":}
         if "eventID" in newPswDict and "psw" in newPswDict:
@@ -62,7 +66,6 @@ class PswMQTTClient(MQTT_client):
                 raise KeyError(f"id: {newPswDict['eventID']} not present in psw table")
         else:
             raise KeyError(f"incorrect data format")
-
 
     def setPswUsed(self, usedPswDict):
         # msg format : {"eventID":, "psw":}
