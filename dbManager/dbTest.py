@@ -9,24 +9,26 @@ ticketNum = 100
 cost = 10
 remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
                     "host": "kandula.db.elephantsql.com", "port": "5432"}
-dbManager.dBReset(remoteDBparams)
- #eventID = dbManager.add(date, startTime, endTime, ticketNum, cost,remoteDBparams)
-print(eventID)
-input()
+conn = dbManager.connectDb(remoteDBparams)
+#dbManager.dBReset(remoteDBparams)
+#eventID = dbManager.add(date, startTime, endTime, ticketNum, cost,conn)
+#print(eventID)
+#input()
 
-password = []
-for i in range(0,ticketNum):
-    password.append(str(i)) 
-dbManager.passwordFill(eventID, password)
+#password = []
+#for i in range(0,ticketNum):
+#    password.append(str(i)) 
+#dbManager.passwordFill(eventID, password)
 
 eventInfo = {}
 eventInfo["EN"] = "Hello there!"
 eventInfo["IT"] = "Ciao!"
 eventInfo["PL"] = "I don't know Polish!"
 eventInfo["URLs"] = "https:what?"
-dbManager.infoFill(eventID, eventInfo)
-dbManager.dailySchedule(date)
-passwrd = dbManager.ticketRetrieve(eventID,"ek29seiba@gmail.com")
-dbManager.gateAccess(eventID,passwrd)
-input()
-dbManager.delete(eventID)
+#dbManager.infoFill(eventID, eventInfo)
+print(dbManager.dailySchedule(date,0,conn))
+#passwrd = dbManager.ticketRetrieve(eventID,"ek29seiba@gmail.com")
+#dbManager.gateAccess(eventID,passwrd)
+#input()
+#dbManager.delete(eventID)
+dbManager.disconnectDb(conn)

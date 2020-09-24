@@ -263,20 +263,16 @@ def dailySchedule(date, passFlag, conn):
         eventID = couple[0]
         dailyEvents[eventID] = {}
 
-        cur.execute("SELECT cost FROM events WHERE ID = %s;",(eventID,))
-        dailyEvents[eventID]["cost"] = cur.fetchone()[0]
+        cur.execute("SELECT ticketTot, ticketLeft, cost FROM events WHERE ID = %s;",(eventID,))
+        temp = cur.fetchone()
+        dailyEvents[eventID]["ticketNum"] = temp[0]
+        dailyEvents[eventID]["ticketLeft"] = temp[1]
+        dailyEvents[eventID]["cost"] = temp[2]
 
-        cur.execute("SELECT ticketTot FROM events WHERE ID = %s;",(eventID,))
-        dailyEvents[eventID]["ticketNum"] = cur.fetchone()[0]
-
-        cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
-        dailyEvents[eventID]["ticketLeft"] = cur.fetchone()[0]
-
-        cur.execute(sql.SQL("SELECT startTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
-        dailyEvents[eventID]["startTime"] = cur.fetchone()[0]
-
-        cur.execute(sql.SQL("SELECT endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
-        dailyEvents[eventID]["endTime"] = cur.fetchone()[0]
+        cur.execute(sql.SQL("SELECT startTime, endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
+        temp = cur.fetchone()
+        dailyEvents[eventID]["startTime"] = temp[0]
+        dailyEvents[eventID]["endTime"] = temp[1]
 
         if passFlag:
             tablePass = "password "+str(eventID)
@@ -330,8 +326,8 @@ def ticketRetrieve(eventID, eMail, conn):
         password = cur.fetchone()[0]
     except:
         return None
-    cur.execute(sql.SQL("UPDATE {} SET eMail = %s WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
-    cur.execute(sql.SQL("UPDATE {} SET usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(password,))
+    cur.execute(sql.SQL("UPDATE {} SET eMail = %s, usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
+    # cur.execute(sql.SQL("UPDATE {} SET usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(password,))
 
     cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
     ticketNum = cur.fetchone()[0] - 1
