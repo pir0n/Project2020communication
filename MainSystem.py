@@ -17,17 +17,20 @@ import dbManager.dbManager as dbManager
 import png
 
 testEV = 1  # enable fake events  for testing
+
 # MAIN CONTROL OF THE BOOKING SYSTEM, ACCESSIBLE THROUGH REST APIs
 # processes:
 # password retrieval from database, conversion to QR code and delivery of code to user through email
 # MQTT communication with multiple gates to send acceptable passwords
 
+# TO-DO: update to the new DB APIs
 DEBUG = True
 dailyEventsPswTable = None
 catalogData = None
 remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
                    "host": "kandula.db.elephantsql.com", "port": "5432"}
 configFileName = "configFile.json"
+DBconn = None  # connection object to access the database, instantiated by the start PUT command to the system
 
 
 class VirtualTicketHandler:
@@ -187,9 +190,9 @@ class MainSystemMQTT(PswMQTTClient):
 
 # thread for scheduled jobs (daily table request and delivery)
 class JobSchedulerThread(threading.Thread):
-    # TO-DO: add API call to retrieve database data in method getDailyTable,
     theadStop = False  # stops the thread when set to True
-    on = False #indicates if the MQTT client is on
+    on = False  # indicates if the MQTT client is on
+    dailyTableTMS = None  # datetime obj storing time at which the last dailytable has been received
 
     def __init__(self, Rtime, subTopics = None):
         # Rtime must be a string of format HH:MM, indicating the time at which the system will update the daily event list
@@ -203,24 +206,25 @@ class JobSchedulerThread(threading.Thread):
                                          MQTTbroker=catalogData.broker["ip"], msgTopics=catalogData.topics,
                                          subscribedTopics=subTopics, initialPswTable=dailyEventsPswTable)
         try:
-            self.MQTTClient.start()  # TEMPORARELY DISABLE BECAUSE test.mosquitto.org is down
+            self.MQTTClient.start()
         except:
             raise Exception("Could not start MQTT client, check if the configuration is correct")
         self.on = True
-        #self.startSchedule()
+        # self.startSchedule() # now called by the start PUT request
 
     def getDailyTable(self):
+        global DBconn
         global dailyEventsPswTable
         global remoteDBparams
         eventDate = datetime.date(2020, 10, 12)  # 12-10-2020, DEBUG DATE
         # eventDate = datetime.date.today()
         print("Retrieving daily table from database...")
-        receivedDailyEvents = dbManager.dailySchedule(eventDate, passFlag=True, remoteDBparams=remoteDBparams)
+        receivedDailyEvents = dbManager.dailySchedule(eventDate, passFlag=True, conn=DBconn)
         print("Daily table retrieved")
+        self.dailyTableTMS = datetime.datetime.now().date()  # get date of current day
         # received dictionary:
         # {eventid: {'name':, 'cost':, 'ticketNum':, 'startTime':, 'endTime':, 'EN':,
         #      'IT':, 'PL':, 'URLs': '{testurl1,testurl2}'}
-        # WARNING: pswTable is not present in the DB returned dict
         tmpDict = {}
         pswList = []
         for event in list(receivedDailyEvents.items()):
@@ -244,10 +248,11 @@ class JobSchedulerThread(threading.Thread):
         print("received daily event table: ", dailyEventsPswTable)
 
     def startSchedule(self, Rtime=None):
+        # schedule the daily table rest and start the scheduler thread
         if Rtime is not None:
             self.requestTime = Rtime
         self.on = True
-        schedule.every().day.at(self.requestTime).do(self.getDailyTable)
+        schedule.every().day.at(self.requestTime).do(self.setDailyTable)
         self.start()
 
     def run(self):
@@ -264,14 +269,20 @@ class JobSchedulerThread(threading.Thread):
     def changeTime(self, newTime):
         self.requestTime = newTime
         schedule.clear()
-        schedule.every().day.at(self.requestTime).do(self.sendDailyTable)
+        schedule.every().day.at(self.requestTime).do(self.setDailyTable)
 
-    def sendDailyTable(self):
-        # send get the daily table from DB and then send it to all gates through MQTT
+    def setDailyTable(self):
+        # WARNING: this method will remove events from the database!
+        # get the daily table from DB and then send it to all gates through MQTT
         global catalogData
+        global DBconn
+        yesterday = self.dailyTableTMS
+        # THIS API CALL DELETES DATA FROM THE DB
+        dbManager.deleteDate(yesterday, DBconn)
+        # retrieve the new daily table from DB
         self.getDailyTable()
+        # send the new daily table to gate
         self.MQTTClient.publish(catalogData.topics["newPswTable"], json.dumps(dailyEventsPswTable))
-        # TO-DO: ADD DB API CALL TO REMOVE TABLE FROM PREVIOUS DAY
 
 
 # RESTful interface exposed through cherrypy
@@ -284,18 +295,18 @@ class MainSystemREST(object):
     # "eventID":{"pswList": ["","",..], "eventDesc":{"EN":..,"IT":..,"PL":..},"imgURL":..,"eventInfo":{"timeslot":..,"cost":..,etc.}}
     # "eventDesc" contains info that needs to be localized, "language": {"name":.., "desc":..}# TO-DO: add remaining tickets
     if testEV:
-        DebugEvents = {
-            "0": {"pswList": [], "eventDesc": {
+        DebugEvents = [
+            {"0": {"pswList": [], "eventDesc": {
                 "EN": {"name": "Fire and Forget at KW Institute for Contemporary Art", "desc": "ENtestdesc0"},
                 "PL": {"name": "Pożar i zapomnij w KW Institute for Contemporary Art", "desc": "PLtestdesc0"},
                 "IT": {"name": "Fuoco e Dimentica al KW Institute for Contemporary Art", "desc": "ITtestdesc0"}},
-                  "imgURL": [], "eventInfo": {"timeslot": [], "cost": "11"}},
-            "1": {"pswList": [], "eventDesc": {
+                  "imgURL": [], "eventInfo": {"timeslot": [], "cost": 10, "ticketLeft": 9}}},
+            {"1": {"pswList": [], "eventDesc": {
                 "EN": {"name": "The Natural History Museum", "desc": "ENtestdesc1"},
                 "PL": {"name": "Muzeum Historii Naturalnej", "desc": "PLtestdesc1"},
                 "IT": {"name": "Il Museo di storia naturale", "desc": "ITtestdesc1"}},
-                  "imgURL": [], "eventInfo": {"timeslot": [], "cost": "9"}},
-        }
+                  "imgURL": [], "eventInfo": {"timeslot": [], "cost": 12, "ticketLeft": 9}}}
+        ]
 
     global DEBUG
     exposed = True
@@ -306,28 +317,25 @@ class MainSystemREST(object):
     requestScheduler = None  # this class must be initialized through the REST API
     initialized = False
 
-    def GET(self, *uri):
+    def GET(self, *uri, **params):
         global dailyEventsPswTable
         # requests URL formats:
         # used for commands sent by the GUI(user side) or the system management interface that request a resource
         # gates can also call a GET req to retrieve the daily psw table
         if len(uri) != 0:
             if uri[0] == "customer":
+                if not self.initialized:
+                    raise cherrypy.HTTPError(500, "system not initialized, call the PUT request to initialize")
                 if uri[1] == "Events":
                     # return list of daily events
-                    if uri[2] == "EN" or uri[2] == "IT" or uri[2] == "PL":
+                    if uri[2] == "EN" or uri[2] == "IT" or uri[2] == "PL" or uri[2] == "all":
                         language = uri[2]  # EN, IT or PL
                     else:
                         raise cherrypy.HTTPError(404, "invalid URL")
-                    outputEventsList = []  # list of dictionaries
-                    for event in list(dailyEvents.items()):
-                        eventID = event[0]
-                        data = event[1]
-                        full_desc = data["eventDesc"]
-                        loc_desc = full_desc[language]
-                        info = data["eventInfo"]
-                        outputEventsList.append({"id":eventID, "name": loc_desc["name"], "description": loc_desc["desc"],
-                                                 "price": info["cost"]})
+                    if "date" not in params:
+                        raise cherrypy.HTTPError(500, 'missing parameter "date" in the request')
+                    eventDate = self.getDate(params["date"])
+                    outputEventsList = self.getEventList(eventDate, language)
                     return json.dumps(outputEventsList)
                 else:
                     raise cherrypy.HTTPError(404, "incorrect URL")
@@ -349,6 +357,7 @@ class MainSystemREST(object):
         global dailyEventsPswTable
         global testEV
         global catalogData
+        global DBconn
         # sent by GUI or system interface to request an action
         if len(uri) != 0:
             # customer services
@@ -377,22 +386,22 @@ class MainSystemREST(object):
                     # ACCESS DB THROUGH APIs
                     if int(Reqdict["n_tickets"]) > 1:
                         # DB API CALL
-                        ticket_remaining = int(dbManager.ticketLeftCheck(Reqdict["eventID"], remoteDBparams))
+                        ticket_remaining = int(dbManager.ticketLeftCheck(Reqdict["eventID"], conn=DBconn))
                         if int(Reqdict["n_tickets"]) > ticket_remaining:
                             return "no ticket available"
                         sel_psw = []
                         for i in range(0, Reqdict["n_tickets"]):
-                            returnVal = dbManager.ticketRetrieve(Reqdict["eventID"], Reqdict["eMail"], remoteDBparams)
+                            returnVal = dbManager.ticketRetrieve(Reqdict["eventID"], Reqdict["eMail"], conn=DBconn)
                             if returnVal is None:
                                 break  # no more tickets
                                 # return sel_psw
                             sel_psw.append(returnVal)
                     else:
                         # DB API CALL
-                        ticket_remaining = int(dbManager.ticketLeftCheck(Reqdict["eventID"], remoteDBparams))
+                        ticket_remaining = int(dbManager.ticketLeftCheck(Reqdict["eventID"], conn=DBconn))
                         if ticket_remaining == 0:
                             return "no ticket available"
-                        sel_psw = dbManager.ticketRetrieve(int(Reqdict["eventID"]), Reqdict["eMail"], remoteDBparams)
+                        sel_psw = dbManager.ticketRetrieve(int(Reqdict["eventID"]), Reqdict["eMail"], conn=DBconn)
                         # NOTE: eventID is an int for now, might change in future
                         if sel_psw is None:
                             return "no ticket available"
@@ -430,8 +439,14 @@ class MainSystemREST(object):
                     print("received start request")
                     if not self.initialized:
                         # instantiate the scheduler and initialize its MQTT client
-                        self.requestScheduler = JobSchedulerThread("00:00", catalogData.topics["pswUsed"])
-                        # raise cherrypy.HTTPError(500, "could not start MQTT client")
+                        try:
+                            self.requestScheduler = JobSchedulerThread("00:00:01", catalogData.topics["pswUsed"])
+                        except:
+                            raise cherrypy.HTTPError(500, "could not start MQTT client")
+                        try:
+                            DBconn = dbManager.connectDb(remoteDBparams)
+                        except:
+                            raise cherrypy.HTTPError(500, "could not connect to the remote database")
                         self.requestScheduler.getDailyTable()  # get daily table from DB
                         self.requestScheduler.startSchedule()
                         # {"eventID" : {'cost': 11, 'ticketNum': 20, 'startTime': 16, 'endTime': 18}}
@@ -443,9 +458,11 @@ class MainSystemREST(object):
                     if uri[2] == "sendDailyTable":
                         if not self.initialized:
                             raise cherrypy.HTTPError(500, "MQTT client not initialized")
-                        self.requestScheduler.sendDailyTable()
+                        # self.requestScheduler.getDailyTable() # TO-DO: function to send daily table through MQTT
 
                 if uri[1] == "scheduler":
+                    if not self.initialized:
+                        raise cherrypy.HTTPError(500, "scheduler initialized")
                     if uri[2] == "start":
                         if self.requestScheduler.on:
                             raise cherrypy.HTTPError(403, "the scheduler is already on")
@@ -465,7 +482,6 @@ class MainSystemREST(object):
                         if not self.requestScheduler.on:
                             raise cherrypy.HTTPError(403, "the scheduler is off")
                         else:
-                            # TO-DO take new time from parameters
                             if "newTime" in param.keys():
                                 newTime = param["newTime"]
                                 if DEBUG:
@@ -477,6 +493,42 @@ class MainSystemREST(object):
             else:
                 raise cherrypy.HTTPError(404, "invalid url")
 
+    def getEventList(self, date, language):
+        global DBconn
+        # date is a datetime.date object
+        # format {1: {'ticketNum': 100, 'ticketLeft': 100, 'cost': 10, 'startTime': '03:00', 'endTime': '04:00',
+        # 'EN': {'name': 'EN_test_name', 'info': 'EN_test_desc'}, 'IT': {'name': 'IT_test_name', 'info': 'IT_test_desc'}
+        # , 'PL': {'name': 'PL_test_name', 'info': 'PL_test_desc'}, 'URLs': ['testurl1', 'testurl2']}
+        eventDict = dbManager.dailySchedule(date, passFlag=False, conn=DBconn)
+        if not eventDict:
+            # dictionary is empty
+            return []
+        else:
+            # order events by start time
+            sortedEvents = sorted(list(eventDict.items()), key=lambda x: int(x[1]["startTime"].split(':')[0])) # ascending by start hour
+            outputList = []
+            for event in sortedEvents:
+                eventID = event[0]
+                dataDict = event[1]
+                if language == "all":
+                    # send name and desc of all languages
+                    tmpDict = {str(eventID): {"IT": dataDict["IT"], "EN": dataDict["EN"], "PL": dataDict["PL"],
+                                              "ticketLeft": dataDict["ticketLeft"], "cost": dataDict["cost"],
+                                              "time": [dataDict["startTime"], dataDict["endTime"]], "URLs": dataDict["URLs"]}}
+                else:
+                    tmpDict = {str(eventID):{language:dataDict[language], "ticketLeft": dataDict["ticketLeft"],
+                                             "cost":dataDict["cost"], "time":[dataDict["startTime"],dataDict["endTime"]],
+                                             "URLs":dataDict["URLs"]}}
+                outputList.append(tmpDict)
+            return outputList
+
+    def getDate(self, dateStr):
+        dateList = dateStr.split('-')
+        try:
+            return datetime.date(int(dateList[2]), int(dateList[1]), int(dateList[0]))
+        except:
+            print("incorrect date format, use DD-MM-YYYY")
+            raise cherrypy.HTTPError(500, "Error: incorrect date format, use DD-MM-YYYY")
 
 if __name__ == '__main__':
     # open configuration file
@@ -496,8 +548,4 @@ if __name__ == '__main__':
     cherrypy.config.update({"server.socket_host": str(ip), "server.socket_port": int(port)})
     cherrypy.engine.start()
     cherrypy.engine.block()
-
-
-
-
 

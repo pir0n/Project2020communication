@@ -9,6 +9,10 @@ from pswUpdateMQTTClient import PswMQTTClient
 catalogData = None
 import requests
 
+import string
+import secrets
+
+
 class GateMQTT(PswMQTTClient):
 
     def ticketCheck(self, eventID, psw):
@@ -169,4 +173,4 @@ if __name__ == '__main__':
     # debugTimeStr = "12-10-2020 12:30"
     # currTime = datetime.strptime(debugTimeStr, "%d-%m-%Y %H:%M")  # dd-mm-yyyy hh-mm
     # print(currTime.strftime("%H:%M"))
-
+    # POSSIBLE ADDITION: ALLOW USER TO TYPE IN THE CODE: 'eventID-psw' instead of scanning the QR
