@@ -21,11 +21,11 @@ conn = dbManager.connectDb(remoteDBparams)
 #dbManager.passwordFill(eventID, password)
 
 eventInfo = {}
-eventInfo["EN"] = "Hello there!"
-eventInfo["IT"] = "Ciao!"
-eventInfo["PL"] = "I don't know Polish!"
-eventInfo["URLs"] = "https:what?"
-#dbManager.infoFill(eventID, eventInfo)
+eventInfo["EN"] = {"name":"pippo","info":"Hello there!"}
+eventInfo["IT"] = {"name":"pippo","info":"Hello there!"}
+eventInfo["PL"] = {"name":"pippo","info":"Hello there!"}
+eventInfo["URLs"] = ["https:what?","nani?"]
+#dbManager.infoFill(0, eventInfo,conn)
 print(dbManager.dailySchedule(date,0,conn))
 #passwrd = dbManager.ticketRetrieve(eventID,"ek29seiba@gmail.com")
 #dbManager.gateAccess(eventID,passwrd)

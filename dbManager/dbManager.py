@@ -280,33 +280,33 @@ def dailySchedule(date, passFlag, conn):
             dailyEvents[eventID]["passTable"] = cur.fetchall()
         else:
             tableInfo = "info "+str(eventID)
+            cur.execute(sql.SQL("SELECT text, type, part FROM {};").format(sql.Identifier(tableInfo)))
+            eventInfo = cur.fetchall()
+            print(eventInfo)
+
             types = ("EN","IT","PL",)
 
+            i = 0
             for infoType in types:
                 dailyEvents[eventID][infoType] = {}
-
-                tempType = "name"+infoType
-                cur.execute(sql.SQL("SELECT text FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(tempType,))
-                dailyEvents[eventID][infoType]["name"] = cur.fetchone()[0]
                 
-                tempType = "info"+infoType
-                cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(tempType,))
-                info = cur.fetchall()
+                dailyEvents[eventID][infoType]["name"] = eventInfo[i][0]
+                i = i + 1
+
                 text = ""
-                for i in range(0,len(info)):
-                    for j in range(0,len(info)):
-                        if info[j][1] == i:
-                            text = text + info[j][0]
+                flag = 0
+                while(flag == 0):
+                    text = text + eventInfo[i][0]
+                    i = i + 1
+                    if eventInfo[i][2] == 0:
+                        flag = 1
                 dailyEvents[eventID][infoType]["info"] = text
 
             tempType = "URLs"
-            cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type = %s;").format(sql.Identifier(tableInfo)),(tempType,))
-            urls = cur.fetchall()
             urlsList = []
-            for i in range(0,len(urls)):
-                for j in range(0,len(urls)):
-                    if urls[j][1] == i:
-                        urlsList.append(urls[j][0])
+
+            for j in range(i,len(eventInfo)):
+                urlsList.append(eventInfo[j][0])
             dailyEvents[eventID][tempType] = urlsList
 
     conn.commit()
