@@ -9,12 +9,20 @@ import time
 #                   "host": "kandula.db.elephantsql.com", "port": "5432"}
 
 
-# argument "date" is a date object
-def add(date, startTime, endTime, ticketNum, cost, remoteDBparams):
+def connectDb(remoteDBparams):
     conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
                             password=remoteDBparams["password"],
                             host=remoteDBparams["host"], port=remoteDBparams["port"])
-        
+    return conn
+
+
+def disconnectDb(conn):
+    conn.close()
+    return 0
+
+
+def add(date, startTime, endTime, ticketNum, cost, conn):
+    
     cur = conn.cursor()
 
     #check for date correctness
@@ -114,17 +122,13 @@ def add(date, startTime, endTime, ticketNum, cost, remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return eventID
 
 
 # password is a list with size = nTickets of eventID
-def passwordFill(eventID, password, remoteDBparams):
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
-        
+def passwordFill(eventID, password, conn):
+     
     cur = conn.cursor()
 
     tableNamePass = "password " + str(eventID) #if ID is int
@@ -134,15 +138,11 @@ def passwordFill(eventID, password, remoteDBparams):
     
     conn.commit()
     cur.close()
-    conn.close()
 
     return eventID 
 
 
-def infoFill(eventID, eventInfo, remoteDBparams):
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+def infoFill(eventID, eventInfo, conn):
         
     cur = conn.cursor()
 
@@ -179,15 +179,11 @@ def infoFill(eventID, eventInfo, remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return eventID
 
 
-def delete(eventID, remoteDBparams):
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+def delete(eventID, conn):
         
     cur = conn.cursor()
     
@@ -218,16 +214,11 @@ def delete(eventID, remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return eventID 
 
 
-def deleteDate(date, remoteDBparams):
-
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+def deleteDate(date, conn):
         
     cur = conn.cursor()
 
@@ -236,20 +227,15 @@ def deleteDate(date, remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     for eventID in IDtuples:
-        delete(eventID[0], remoteDBparams)
+        delete(eventID[0], conn)
 
     return 0
 
 
-def deleteAll(remoteDBparams):
+def deleteAll(conn):
 
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
-        
     cur = conn.cursor()
 
     cur.execute("SELECT ID FROM events;")
@@ -257,21 +243,15 @@ def deleteAll(remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
-    
-    
 
     for eventID in IDtuples:
-        delete(eventID[0], remoteDBparams)
+        delete(eventID[0], conn)
 
     return 0
 
 
-def dailySchedule(date, passFlag, remoteDBparams):
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
-        
+def dailySchedule(date, passFlag, conn):
+
     cur = conn.cursor()
     
     cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
@@ -335,16 +315,11 @@ def dailySchedule(date, passFlag, remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return dailyEvents 
 
 
-def ticketRetrieve(eventID, eMail, remoteDBparams):
-
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+def ticketRetrieve(eventID, eMail, conn):
         
     cur = conn.cursor()
 
@@ -369,10 +344,7 @@ def ticketRetrieve(eventID, eMail, remoteDBparams):
 
     return password
 
-def ticketLeftCheck(eventID, remoteDBparams):
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+def ticketLeftCheck(eventID, conn):
         
     cur = conn.cursor()
 
@@ -381,18 +353,13 @@ def ticketLeftCheck(eventID, remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return ticketLeft
 
 
-def dBReset(remoteDBparams):
+def dBReset(conn):
 
-    deleteAll(remoteDBparams)
-
-    conn = psycopg2.connect(dbname=remoteDBparams["dbname"], user=remoteDBparams["user"],
-                            password=remoteDBparams["password"],
-                            host=remoteDBparams["host"], port=remoteDBparams["port"])
+    deleteAll(conn)
         
     cur = conn.cursor()
 
@@ -401,6 +368,5 @@ def dBReset(remoteDBparams):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return 0
