@@ -337,11 +337,8 @@ def ticketRetrieve(eventID, eMail, conn):
     except:
         return None
     cur.execute(sql.SQL("UPDATE {} SET eMail = %s, usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
-
-    cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
-    ticketNum = cur.fetchone()[0] - 1
-
-    cur.execute("UPDATE events SET ticketLeft = %s WHERE ID = %s;",(eventID,))
+    
+    cur.execute("UPDATE events SET ticketLeft = ticketLeft - 1 WHERE ID = %s;",(eventID,))
 
     conn.commit()
     cur.close()
