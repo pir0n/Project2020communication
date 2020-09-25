@@ -341,7 +341,7 @@ def ticketRetrieve(eventID, eMail, conn):
     cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
     ticketNum = cur.fetchone()[0] - 1
 
-    cur.execute("UPDATE events SET ticketLeft = %s WHERE ID = %s;",(ticketNum,eventID))
+    cur.execute("UPDATE events SET ticketLeft = %s WHERE ID = %s;",(eventID,))
 
     conn.commit()
     cur.close()
