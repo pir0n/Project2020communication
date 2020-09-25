@@ -85,8 +85,10 @@ def add(date, startTime, endTime, ticketNum, cost, conn):
         cur.execute(sql.SQL("SELECT startTime, endTime FROM {};").format(sql.Identifier(dateName)))
         usedTime = cur.fetchall()
         for i in range(len(usedTime)):
-            usedStart = int(usedTime[i][0][0:2])*60+int(usedTime[i][0][3:5])
-            usedEnd = int(usedTime[i][1][0:2])*60+int(usedTime[i][1][3:5])
+            tempStart = usedTime[i][0].split(":")
+            usedStart = int(tempStart[0])*60+int(tempStart[1])
+            tempEnd = usedTime[i][1].split(":")
+            usedEnd = int(tempEnd[0])*60+int(tempEnd[1])
             if startMinutes==usedStart or (startMinutes>usedStart and startMinutes<usedEnd)\
                or endMinutes==usedEnd or (endMinutes>usedStart and endMinutes<usedEnd)\
                or (startMinutes<usedStart and endMinutes>usedEnd):
@@ -153,28 +155,27 @@ def infoFill(eventID, eventInfo, conn):
     for infoType in types:
 
         infoTemp = eventInfo[infoType]["name"]
-        tempType = "name"+infoType
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(infoTemp,tempType,0))
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(infoTemp,infoType,0))
 
         flag = 0
         i = 0
         infoTemp = eventInfo[infoType]["info"]
-        tempType = "info"+infoType
+
         while flag == 0:
             if len(infoTemp) > 255:
                 info = infoTemp[0:255]
-                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,i))
+                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,infoType,i))
                 i = i + 1
                 infoTemp = infoTemp[255:]
             else:
                 info = infoTemp
-                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,tempType,i))
+                cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(info,infoType,i))
                 flag = 1
     
     i = 0
-    tempType = "URLs"
-    for url in eventInfo[tempType]:
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,tempType,i))
+    infoType = "URLs"
+    for url in eventInfo[infoType]:
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,infoType,i))
         i = i + 1
 
     conn.commit()
@@ -250,46 +251,55 @@ def deleteAll(conn):
     return 0
 
 
-def dailySchedule(date, passFlag, conn):
+def dailySchedule(date, passFlag, languages, conn):
 
     cur = conn.cursor()
     
-    cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
+    cur.execute(sql.SQL("SELECT ID, startTime, endTime, ticketTot,\
+                         ticketLeft, cost FROM events INNER JOIN {} USING(ID)").format(sql.Identifier(str(date))))
     tuplesID = cur.fetchall()
 
     dailyEvents = {}
 
     for couple in tuplesID:
         eventID = couple[0]
+
         dailyEvents[eventID] = {}
-
-        cur.execute("SELECT ticketTot, ticketLeft, cost FROM events WHERE ID = %s;",(eventID,))
-        temp = cur.fetchone()
-        dailyEvents[eventID]["ticketNum"] = temp[0]
-        dailyEvents[eventID]["ticketLeft"] = temp[1]
-        dailyEvents[eventID]["cost"] = temp[2]
-
-        cur.execute(sql.SQL("SELECT startTime, endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(date))),(eventID,))
-        temp = cur.fetchone()
-        dailyEvents[eventID]["startTime"] = temp[0]
-        dailyEvents[eventID]["endTime"] = temp[1]
-
+        dailyEvents[eventID]["startTime"] = couple[1]
+        dailyEvents[eventID]["endTime"] = couple[2]
+        dailyEvents[eventID]["ticketNum"] = couple[3]
+        dailyEvents[eventID]["ticketLeft"] = couple[4]
+        dailyEvents[eventID]["cost"] = couple[5]
+        
         if passFlag:
             tablePass = "password "+str(eventID)
             cur.execute(sql.SQL("SELECT password, eMail FROM {} WHERE usedFlag = true;").format(sql.Identifier(tablePass)))
             dailyEvents[eventID]["passTable"] = cur.fetchall()
         else:
             tableInfo = "info "+str(eventID)
-            cur.execute(sql.SQL("SELECT text, type, part FROM {};").format(sql.Identifier(tableInfo)))
-            eventInfo = cur.fetchall()
-            print(eventInfo)
+            if len(languages) == 1:    
+                cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type in (%s,%s);").format(sql.Identifier(tableInfo)),(languages[0],"URLs"))
+                eventInfo = cur.fetchall()
+            if len(languages) == 2:    
+                cur.execute(sql.SQL("SELECT text, part FROM {} WHERE type in (%s,%s,%s);").format(sql.Identifier(tableInfo)),(languages[0],languages[1],"URLs"))
+                eventInfo = cur.fetchall()
+            if len(languages) == 3:    
+                cur.execute(sql.SQL("SELECT text, part FROM {};").format(sql.Identifier(tableInfo)))
+                eventInfo = cur.fetchall()
 
-            types = ("EN","IT","PL",)
+            temp = []
+            if "EN" in languages:
+                temp.append("EN")
+            if "IT" in languages:
+                temp.append("IT")
+            if "PL" in languages:
+                temp.append("PL")
+            languages = temp
 
             i = 0
-            for infoType in types:
+            for infoType in languages:
                 dailyEvents[eventID][infoType] = {}
-                
+            
                 dailyEvents[eventID][infoType]["name"] = eventInfo[i][0]
                 i = i + 1
 
@@ -298,16 +308,16 @@ def dailySchedule(date, passFlag, conn):
                 while(flag == 0):
                     text = text + eventInfo[i][0]
                     i = i + 1
-                    if eventInfo[i][2] == 0:
+                    if eventInfo[i][1] == 0:
                         flag = 1
                 dailyEvents[eventID][infoType]["info"] = text
 
-            tempType = "URLs"
+            infoType = "URLs"
             urlsList = []
 
             for j in range(i,len(eventInfo)):
                 urlsList.append(eventInfo[j][0])
-            dailyEvents[eventID][tempType] = urlsList
+            dailyEvents[eventID][infoType] = urlsList
 
     conn.commit()
     cur.close()
@@ -327,7 +337,6 @@ def ticketRetrieve(eventID, eMail, conn):
     except:
         return None
     cur.execute(sql.SQL("UPDATE {} SET eMail = %s, usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
-    # cur.execute(sql.SQL("UPDATE {} SET usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(password,))
 
     cur.execute("SELECT ticketLeft FROM events WHERE ID = %s;",(eventID,))
     ticketNum = cur.fetchone()[0] - 1
@@ -336,7 +345,6 @@ def ticketRetrieve(eventID, eMail, conn):
 
     conn.commit()
     cur.close()
-    conn.close()
 
     return password
 
