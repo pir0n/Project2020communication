@@ -188,16 +188,16 @@ def delete(eventID, conn):
         
     cur = conn.cursor()
     
-    eventID = str(eventID) #check for string or int for commands
+    eventID = str(eventID) 
 
     cur.execute("SELECT date FROM events WHERE ID = %s;",(eventID,))
     date = str(cur.fetchone()[0])
     
     # delete from date table the entry related to the given event
-    cur.execute(sql.SQL("DELETE FROM {} WHERE id = %s;").format(sql.Identifier(date)),(eventID,))
+    cur.execute(sql.SQL("DELETE FROM {} WHERE ID = %s;").format(sql.Identifier(date)),(eventID,))
 
     # check if date table is empty
-    cur.execute(sql.SQL("SELECT id FROM {} LIMIT 1;").format(sql.Identifier(date)))
+    cur.execute(sql.SQL("SELECT ID FROM {} LIMIT 1;").format(sql.Identifier(date)))
     check = cur.fetchone()
 
     # if it is, delete it
@@ -220,33 +220,40 @@ def delete(eventID, conn):
 
 
 def deleteDate(date, conn):
-        
-    cur = conn.cursor()
 
-    cur.execute("SELECT ID FROM events WHERE date = %s;",(date,))
-    IDtuples = cur.fetchall()
+    cur = conn.cursor()
+    date = str(date)
+
+    
+    cur.execute(("SELECT ID FROM events WHERE date = %s;"),(date,))
+    tuplesID = cur.fetchall()
+
+    for couple in tuplesID:
+        eventID = str(couple[0])
+        tablePass = "password "+eventID
+        cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tablePass)))
+        tableInfo = "info "+eventID
+        cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tableInfo)))
+
+    cur.execute(("DELETE FROM events WHERE ID in (SELECT ID FROM events WHERE date = %s);"),(date,))
+
+    cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(date)))
 
     conn.commit()
     cur.close()
-
-    for eventID in IDtuples:
-        delete(eventID[0], conn)
 
     return 0
 
 
-def deleteAll(conn):
+def dBReset(conn, dbUser):
 
     cur = conn.cursor()
 
-    cur.execute("SELECT ID FROM events;")
-    IDtuples = cur.fetchall()
+    cur.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(dbUser)))
+    cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
 
     conn.commit()
     cur.close()
-
-    for eventID in IDtuples:
-        delete(eventID[0], conn)
 
     return 0
 
@@ -336,6 +343,7 @@ def ticketRetrieve(eventID, eMail, conn):
         password = cur.fetchone()[0]
     except:
         return None
+
     cur.execute(sql.SQL("UPDATE {} SET eMail = %s, usedFlag = true WHERE password = %s;").format(sql.Identifier(tablePass)),(eMail,password))
     
     cur.execute("UPDATE events SET ticketLeft = ticketLeft - 1 WHERE ID = %s;",(eventID,))
@@ -357,17 +365,3 @@ def ticketLeftCheck(eventID, conn):
 
     return ticketLeft
 
-
-def dBReset(conn):
-
-    deleteAll(conn)
-        
-    cur = conn.cursor()
-
-    cur.execute('DROP TABLE events')
-    cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
-
-    conn.commit()
-    cur.close()
-
-    return 0
