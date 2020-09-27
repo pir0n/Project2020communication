@@ -261,12 +261,15 @@ def dBReset(conn, dbUser):
 def dailySchedule(date, passFlag, languages, conn):
 
     cur = conn.cursor()
-    
+    cur.execute("SELECT ID FROM events WHERE date = %s",(str(date),))
     try:
-        cur.execute(sql.SQL("SELECT ID, startTime, endTime, ticketTot,\
-                         ticketLeft, cost FROM events INNER JOIN {} USING(ID)").format(sql.Identifier(str(date))))
+        cur.fetchone()[0]
     except:
         return None
+    cur.execute(sql.SQL("SELECT ID, startTime, endTime, ticketTot,\
+                         ticketLeft, cost FROM events INNER JOIN {} USING(ID)").format(sql.Identifier(str(date))))
+    
+        
     tuplesID = cur.fetchall()
 
     dailyEvents = {}

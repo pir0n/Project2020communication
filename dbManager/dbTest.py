@@ -25,6 +25,10 @@ eventInfo["IT"] = {"name":"goofey","info":"Hello there!"}
 eventInfo["PL"] = {"name":"sbenghi","info":"Hello there!"}
 eventInfo["URLs"] = ["https:what?","nani?"]
 #dbManager.infoFill(eventID, eventInfo,conn)
+date = datetime.date(2020,11,12)
+print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
+date = datetime.date(2020,10,12)
+print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
 print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
 #passwrd = dbManager.ticketRetrieve(eventID,"ek29seiba@gmail.com")
 #dbManager.gateAccess(eventID,passwrd)
