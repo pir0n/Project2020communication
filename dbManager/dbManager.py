@@ -262,8 +262,11 @@ def dailySchedule(date, passFlag, languages, conn):
 
     cur = conn.cursor()
     
-    cur.execute(sql.SQL("SELECT ID, startTime, endTime, ticketTot,\
+    try:
+        cur.execute(sql.SQL("SELECT ID, startTime, endTime, ticketTot,\
                          ticketLeft, cost FROM events INNER JOIN {} USING(ID)").format(sql.Identifier(str(date))))
+    except:
+        return None
     tuplesID = cur.fetchall()
 
     dailyEvents = {}
