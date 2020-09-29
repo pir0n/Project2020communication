@@ -371,3 +371,58 @@ def ticketLeftCheck(eventID, conn):
 
     return ticketLeft
 
+
+def setupDeviceCatalog(conn):
+
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE devices (url varchar(255), type int);")
+
+    conn.commit()
+    cur.close()
+
+    return 1
+
+def addMainSystemInfo(mainUrl, mqttBroker, conn):
+
+    cur = conn.cursor()
+
+    cur.execute("UPDATE devices SET url = %s, type = 0;",(mainUrl,))
+    cur.execute("UPDATE devices SET url = %s, type = 1;",(mqttBroker,))
+
+    conn.commit()
+    cur.close()
+
+    return 1
+
+def addTopic(topic, conn):
+
+    cur = conn.cursor()
+
+    cur.execute("UPDATE devices SET url = %s, type = 2;",(topic,))
+    
+    conn.commit()
+    cur.close()
+
+    return 1
+
+def retreiveCatalog(conn):
+
+    cur = conn.cursor()
+
+    cur.execute("SELECT url, type FROM devices;")
+    couples = cur.fetchall()
+    catalog = {}
+    catalog["urls"] = {}
+    catalog["topics"] = []
+    for info in couples:
+        if info[1] == 0:
+            catalog["urls"]["mainSystem"] = info[0]
+        if info[1] == 1:
+            catalog["urls"]["MQTTbroker"] = info[0]
+        if info[1] == 2:
+            catalog["topics"].append(info[0])
+    
+    conn.commit()
+    cur.close()
+
+    return 1
