@@ -386,8 +386,8 @@ def addMainSystemInfo(mainUrl, mqttBroker, conn):
 
     cur = conn.cursor()
 
-    cur.execute("UPDATE devices SET url = %s, type = 0;",(mainUrl,))
-    cur.execute("UPDATE devices SET url = %s, type = 1;",(mqttBroker,))
+    cur.execute("INSERT INTO devices VALUES (%s, 0);",(mainUrl,))
+    cur.execute("INSERT INTO devices VALUES (%s, 1);",(mqttBroker,))
 
     conn.commit()
     cur.close()
@@ -398,7 +398,7 @@ def addTopic(topic, conn):
 
     cur = conn.cursor()
 
-    cur.execute("UPDATE devices SET url = %s, type = 2;",(topic,))
+    cur.execute("INSERT INTO devices VALUES (%s, 2);",(topic,))
     
     conn.commit()
     cur.close()
