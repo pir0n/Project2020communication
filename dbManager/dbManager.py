@@ -150,6 +150,8 @@ def infoFill(eventID, eventInfo, conn):
 
     tableNameInfo = "info "+str(eventID)
 
+    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableNameInfo)))
+
     types = ("EN","IT","PL")
 
     for infoType in types:
@@ -177,6 +179,43 @@ def infoFill(eventID, eventInfo, conn):
     for url in eventInfo[infoType]:
         cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,infoType,i))
         i = i + 1
+
+    conn.commit()
+    cur.close()
+
+    return eventID
+
+def infoUpdate(eventID, eventInfo, conn):
+        
+    cur = conn.cursor()
+
+    newInfo = retreiveInfo(eventID, conn)
+
+    if eventInfo["cost"] > -1:
+        cur.execute("UPDATE events SET cost = %s WHERE ID = %s;",(eventInfo["cost"],eventID))
+    
+    if eventInfo["EN"]["name"] != "":
+        newInfo["EN"]["name"] = eventInfo["EN"]["name"]
+
+    if eventInfo["EN"]["info"] != "":
+        newInfo["EN"]["info"] = eventInfo["EN"]["info"]
+        
+    if eventInfo["IT"]["name"] != "":
+        newInfo["IT"]["name"] = eventInfo["IT"]["name"]
+        
+    if eventInfo["IT"]["info"] != "":
+        newInfo["IT"]["info"] = eventInfo["IT"]["info"]
+        
+    if eventInfo["PL"]["name"] != "":
+        newInfo["PL"]["name"] = eventInfo["PL"]["name"]
+        
+    if eventInfo["PL"]["info"] != "":
+        newInfo["PL"]["info"] = eventInfo["PL"]["info"]
+    
+    if eventInfo["URLs"] != []:
+        newInfo["URLs"] = eventInfo["URLs"]
+        
+    infoFill(eventID, newInfo, conn)
 
     conn.commit()
     cur.close()
@@ -336,6 +375,61 @@ def dailySchedule(date, passFlag, languages, conn):
     cur.close()
 
     return dailyEvents 
+
+def retreiveInfo(eventID, conn):
+
+    cur = conn.cursor()
+    
+    cur.execute("SELECT date, ticketTot, ticketLeft, cost FROM events WHERE ID = %s;",(eventID,))
+
+    couple = cur.fetchone()
+
+    eventInfo = {}
+
+    eventInfo["ticketNum"] = couple[1]
+    eventInfo["ticketLeft"] = couple[2]
+    eventInfo["cost"] = couple[3]
+    
+    cur.execute(sql.SQL("SELECT startTime, endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(couple[0]))),(eventID,))
+    couple = cur.fetchone()
+
+    eventInfo["startTime"] = couple[0]
+    eventInfo["endTime"] = couple[1]
+
+    tableInfo = "info "+str(eventID)
+   
+    cur.execute(sql.SQL("SELECT text, part FROM {};").format(sql.Identifier(tableInfo)))
+    eventText = cur.fetchall()
+
+    languages = ("EN","IT","PL")
+
+    i = 0
+    for infoType in languages:
+        eventInfo[infoType] = {}
+    
+        eventInfo[infoType]["name"] = eventText[i][0]
+        i = i + 1
+
+        text = ""
+        flag = 0
+        while(flag == 0):
+            text = text + eventText[i][0]
+            i = i + 1
+            if eventText[i][1] == 0:
+                flag = 1
+        eventInfo[infoType]["info"] = text
+
+    infoType = "URLs"
+    urlsList = []
+
+    for j in range(i,len(eventText)):
+        urlsList.append(eventText[j][0])
+    eventInfo[infoType] = urlsList
+
+    conn.commit()
+    cur.close()
+
+    return eventInfo 
 
 
 def ticketRetrieve(eventID, eMail, conn):

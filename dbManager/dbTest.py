@@ -20,16 +20,19 @@ conn = dbManager.connectDb(remoteDBparams)
 #dbManager.passwordFill(eventID, password)
 
 eventInfo = {}
-eventInfo["EN"] = {"name":"pippo","info":"Hello there!"}
-eventInfo["IT"] = {"name":"goofey","info":"Hello there!"}
+eventInfo["EN"] = {"name":"YOOOO","info":""}
+eventInfo["IT"] = {"name":"","info":"plollo"}
 eventInfo["PL"] = {"name":"sbenghi","info":"Hello there!"}
-eventInfo["URLs"] = ["https:what?","nani?"]
+eventInfo["URLs"] = ["https:what?","nani?","ciocio"]
+eventInfo["cost"] = 70
 #dbManager.infoFill(eventID, eventInfo,conn)
 date = datetime.date(2020,11,12)
-print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
+#print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
 date = datetime.date(2020,10,12)
-print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
-print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
+print(dbManager.retreiveInfo(0, conn))
+dbManager.infoUpdate(0,eventInfo, conn)
+print(dbManager.retreiveInfo(0, conn))
+#print(dbManager.dailySchedule(date,0,("PL","EN"),conn))
 #passwrd = dbManager.ticketRetrieve(eventID,"ek29seiba@gmail.com")
 #dbManager.gateAccess(eventID,passwrd)
 #input()
