@@ -185,6 +185,7 @@ def infoFill(eventID, eventInfo, conn):
 
     return eventID
 
+
 def infoUpdate(eventID, eventInfo, conn):
         
     cur = conn.cursor()
@@ -230,8 +231,11 @@ def delete(eventID, conn):
     eventID = str(eventID) 
 
     cur.execute("SELECT date FROM events WHERE ID = %s;",(eventID,))
-    date = str(cur.fetchone()[0])
-    
+    date = cur.fetchone()[0]
+    if date is None:
+        return None
+    else:
+        date = str(date)
     # delete from date table the entry related to the given event
     cur.execute(sql.SQL("DELETE FROM {} WHERE ID = %s;").format(sql.Identifier(date)),(eventID,))
 
@@ -276,8 +280,10 @@ def deleteDate(date, conn):
 
     cur.execute(("DELETE FROM events WHERE ID in (SELECT ID FROM events WHERE date = %s);"),(date,))
 
-    cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(date)))
-
+    try:
+        cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(date)))
+    except:
+        return -1
     conn.commit()
     cur.close()
 
@@ -376,6 +382,7 @@ def dailySchedule(date, passFlag, languages, conn):
 
     return dailyEvents 
 
+
 def retreiveInfo(eventID, conn):
 
     cur = conn.cursor()
@@ -383,7 +390,8 @@ def retreiveInfo(eventID, conn):
     cur.execute("SELECT date, ticketTot, ticketLeft, cost FROM events WHERE ID = %s;",(eventID,))
 
     couple = cur.fetchone()
-
+    if couple is None: #event not found in the DB
+        return None
     eventInfo = {}
 
     eventInfo["ticketNum"] = couple[1]
@@ -453,6 +461,7 @@ def ticketRetrieve(eventID, eMail, conn):
 
     return password
 
+
 def ticketLeftCheck(eventID, conn):
         
     cur = conn.cursor()
@@ -476,6 +485,7 @@ def setupDeviceCatalog(conn):
 
     return 1
 
+
 def addMainSystemInfo(mainUrl, mqttBroker, conn):
 
     cur = conn.cursor()
@@ -488,6 +498,7 @@ def addMainSystemInfo(mainUrl, mqttBroker, conn):
 
     return 1
 
+
 def addTopic(topic, conn):
 
     cur = conn.cursor()
@@ -498,6 +509,7 @@ def addTopic(topic, conn):
     cur.close()
 
     return 1
+
 
 def retreiveCatalog(conn):
 
@@ -519,4 +531,4 @@ def retreiveCatalog(conn):
     conn.commit()
     cur.close()
 
-    return 1
+    return catalog
