@@ -271,6 +271,9 @@ def deleteDate(date, conn):
     cur.execute(("SELECT ID FROM events WHERE date = %s;"),(date,))
     tuplesID = cur.fetchall()
 
+    if tuplesID is None:
+        return None
+
     for couple in tuplesID:
         eventID = str(couple[0])
         tablePass = "password "+eventID
@@ -438,6 +441,26 @@ def retreiveInfo(eventID, conn):
     cur.close()
 
     return eventInfo 
+
+
+def retreiveDateList(conn):
+
+    cur = conn.cursor()
+
+    cur.execute("SELECT date FROM events;")
+    dates = cur.fetchall()
+
+    if dates is None:
+        return None
+
+    dateList = []
+    
+    for date in dates:
+        date = str(date[0])
+        if not(date in dateList):
+            dateList.append(date)
+    
+    return dateList
 
 
 def ticketRetrieve(eventID, eMail, conn):
