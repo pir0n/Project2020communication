@@ -6,12 +6,14 @@ import time
 from datetime import datetime
 import json
 from pswUpdateMQTTClient import PswMQTTClient
-catalogData = None
 import requests
-
+from systemConfigurationManager import SysConfig
 import string
 import secrets
+import sys
+import os
 
+catalogData = None
 
 class GateMQTT(PswMQTTClient):
 
@@ -136,7 +138,7 @@ class GateSystem:
                                     # event hasn't started yet
                                     # display message with starting time of event
                                     pass
-            print("Decoded data", obj.data.decode('utf-8'), type(obj.data.decode('utf-8')))  # byte type
+            # print("Decoded data", obj.data.decode('utf-8'), type(obj.data.decode('utf-8')))  # byte type
             # cv2.putText(frame, str(obj.data), (50, 50), font, 2,(255, 0, 0), 3)
 
             # show video capture
@@ -149,18 +151,18 @@ class GateSystem:
 
 if __name__ == '__main__':
     # read config file
-    configFileName = "configFile.json"
-    DEVICEID = "gate1"  # UNIQUE ID OF THE GATE
+    configFileName = os.path.join(sys.path[0], "configFile.json")
     with open(configFileName, "r") as fp:
-        configDict = json.load(fp)
+        config = json.load(fp)
+    if "DBparams" not in config:
+        raise KeyError("access parameters to the remote DB are missing from the configuration file, "
+                       "('DBparams' key is missing)")
 
-    # GET request to catalog for system info
-    print("Requesting catalog for data...")
-    catalogData = catalog(configDict["resourceCatalog"]["ip"], configDict["resourceCatalog"]["port"])
+    DEVICEID = config["Gate"]["MQTT_id"]  # UNIQUE ID OF THE GATE
+    catalogData = SysConfig(config["DBparams"])
     catalogData.requestAll()
-    print("catalog data received")
     # GET request to main system for daily table
-    reqUrl = "http://"+catalogData.urls["MainSystem"]["ip"]+':'+str(catalogData.urls["MainSystem"]["port"])+'/gate/pswTable'
+    reqUrl = catalogData.urls["mainSystem"]+'/gate/pswTable'
     print(f"Requesting daily password table from Main System with url {reqUrl}...")
     response = requests.get(reqUrl)
     pswTable = json.loads(response.content.decode('utf-8'))

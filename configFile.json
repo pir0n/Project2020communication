@@ -1,4 +1,19 @@
 {
-  "resourceCatalog":{"ip": "127.0.0.1", "port": 8080},
-  "MainSystem": {"ip": "127.0.0.2", "port": 8081}
+  "resourceCatalog": {
+    "ip": "127.0.0.1",
+    "port": 8080
+  },
+  "MainSystem": {
+    "ip": "127.0.0.2",
+    "port": 8888
+  },
+  "Gate": {
+    "MQTT_id": "gate1"
+  },
+  "DBparams": {
+    "dbname": "dbuwxucc",
+    "user": "dbuwxucc",
+    "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
+    "host": "kandula.db.elephantsql.com",
+    "port": "5432"}
 }
