@@ -512,9 +512,10 @@ def setupDeviceCatalog(conn):
 def addMainSystemInfo(mainUrl, mqttBroker, conn):
 
     cur = conn.cursor()
-
-    cur.execute("INSERT INTO devices VALUES (%s, 0);",(mainUrl,))
-    cur.execute("INSERT INTO devices VALUES (%s, 1);",(mqttBroker,))
+    if mainUrl is not None:
+        cur.execute("INSERT INTO devices VALUES (%s, 0);",(mainUrl,))
+    if mqttBroker is not None:
+        cur.execute("INSERT INTO devices VALUES (%s, 1);",(mqttBroker,))
 
     conn.commit()
     cur.close()
