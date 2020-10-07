@@ -322,6 +322,15 @@ def dailySchedule(date, passFlag, languages, conn):
 
     dailyEvents = {}
 
+    temp = []
+    if "EN" in languages:
+        temp.append("EN")
+    if "IT" in languages:
+        temp.append("IT")
+    if "PL" in languages:
+        temp.append("PL")
+    languages = temp
+
     for couple in tuplesID:
         eventID = couple[0]
 
@@ -347,38 +356,36 @@ def dailySchedule(date, passFlag, languages, conn):
             if len(languages) == 3:    
                 cur.execute(sql.SQL("SELECT text, part FROM {};").format(sql.Identifier(tableInfo)))
                 eventInfo = cur.fetchall()
-
-            temp = []
-            if "EN" in languages:
-                temp.append("EN")
-            if "IT" in languages:
-                temp.append("IT")
-            if "PL" in languages:
-                temp.append("PL")
-            languages = temp
-
-            i = 0
-            for infoType in languages:
-                dailyEvents[eventID][infoType] = {}
-            
-                dailyEvents[eventID][infoType]["name"] = eventInfo[i][0]
-                i = i + 1
-
-                text = ""
-                flag = 0
-                while(flag == 0):
-                    text = text + eventInfo[i][0]
+            if eventInfo is None:
+                urlsList = []
+                for infoType in languages:
+                    dailyEvents[eventID][infoType] = {}
+                    dailyEvents[eventID][infoType]["name"] = ""
+                    dailyEvents[eventID][infoType]["info"] = ""
+                    dailyEvents[eventID][infoType] = urlsList
+            else:
+                i = 0
+                for infoType in languages:
+                    dailyEvents[eventID][infoType] = {}
+                
+                    dailyEvents[eventID][infoType]["name"] = eventInfo[i][0]
                     i = i + 1
-                    if eventInfo[i][1] == 0:
-                        flag = 1
-                dailyEvents[eventID][infoType]["info"] = text
 
-            infoType = "URLs"
-            urlsList = []
+                    text = ""
+                    flag = 0
+                    while(flag == 0):
+                        text = text + eventInfo[i][0]
+                        i = i + 1
+                        if eventInfo[i][1] == 0:
+                            flag = 1
+                    dailyEvents[eventID][infoType]["info"] = text
 
-            for j in range(i,len(eventInfo)):
-                urlsList.append(eventInfo[j][0])
-            dailyEvents[eventID][infoType] = urlsList
+                infoType = "URLs"
+                urlsList = []
+
+                for j in range(i,len(eventInfo)):
+                    urlsList.append(eventInfo[j][0])
+                dailyEvents[eventID][infoType] = urlsList
 
     conn.commit()
     cur.close()
@@ -513,8 +520,10 @@ def addMainSystemInfo(mainUrl, mqttBroker, conn):
 
     cur = conn.cursor()
     if mainUrl is not None:
+        cur.execute("DELETE FROM devices WHERE type = 0;")
         cur.execute("INSERT INTO devices VALUES (%s, 0);",(mainUrl,))
     if mqttBroker is not None:
+        cur.execute("DELETE FROM devices WHERE type = 1;")
         cur.execute("INSERT INTO devices VALUES (%s, 1);",(mqttBroker,))
 
     conn.commit()
@@ -529,6 +538,18 @@ def addTopic(topic, conn):
 
     cur.execute("INSERT INTO devices VALUES (%s, 2);",(topic,))
     
+    conn.commit()
+    cur.close()
+
+    return 1
+
+
+def deleteTopics(conn):
+
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM devices WHERE type = 2;")
+
     conn.commit()
     cur.close()
 
