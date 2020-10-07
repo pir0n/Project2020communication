@@ -38,5 +38,6 @@ date = datetime.date(2020,10,12)
 #input()
 #dbManager.deleteDate(date,conn)
 
-print(dbManager.retreiveDateList(conn))
+print(dbManager.retreiveCatalog(conn))
+
 dbManager.disconnectDb(conn)

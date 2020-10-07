@@ -535,21 +535,9 @@ def addMainSystemInfo(mainUrl, mqttBroker, conn):
 def addTopic(topic, conn):
 
     cur = conn.cursor()
-
+    cur.execute("DELETE FROM devices WHERE type = 2;")
     cur.execute("INSERT INTO devices VALUES (%s, 2);",(topic,))
     
-    conn.commit()
-    cur.close()
-
-    return 1
-
-
-def deleteTopics(conn):
-
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM devices WHERE type = 2;")
-
     conn.commit()
     cur.close()
 
@@ -564,14 +552,13 @@ def retreiveCatalog(conn):
     couples = cur.fetchall()
     catalog = {}
     catalog["urls"] = {}
-    catalog["topics"] = []
     for info in couples:
         if info[1] == 0:
             catalog["urls"]["mainSystem"] = info[0]
         if info[1] == 1:
             catalog["urls"]["MQTTbroker"] = info[0]
         if info[1] == 2:
-            catalog["topics"].append(info[0])
+            catalog["topics"] = info[0][1:-1].split(",")
     
     conn.commit()
     cur.close()
