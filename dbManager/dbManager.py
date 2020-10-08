@@ -110,7 +110,8 @@ def add(date, startTime, endTime, ticketNum, cost, conn):
     else:
         eventID = 0
     # ID, date, tickets_tot, tickets_left, cost
-    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, %s);", (eventID, date, ticketNum, ticketNum, cost))
+    cur.execute("INSERT INTO events VALUES (%s, %s, %s, %s, \
+                %s, %s, %s, %s,);", (eventID, date, ticketNum, ticketNum, cost, 100, 100, 100))
 
     cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(dateName)),(eventID,startTime,endTime))
 
@@ -147,6 +148,13 @@ def passwordFill(eventID, password, conn):
 def infoFill(eventID, eventInfo, conn):
         
     cur = conn.cursor()
+
+    if eventInfo["reduction"]["student"] != "":
+        cur.execute("UPDATE events SET student = %s WHERE ID = %s;",(eventInfo["reduction"]["student"], eventID))
+    if eventInfo["reduction"]["group10"] != "":
+        cur.execute("UPDATE events SET group10 = %s WHERE ID = %s;",(eventInfo["reduction"]["group10"], eventID))
+    if eventInfo["reduction"]["over60"] != "":
+        cur.execute("UPDATE events SET over60 = %s WHERE ID = %s;",(eventInfo["reduction"]["over60"], eventID))
 
     tableNameInfo = "info "+str(eventID)
 
@@ -194,6 +202,13 @@ def infoUpdate(eventID, eventInfo, conn):
 
     if eventInfo["cost"] > -1:
         cur.execute("UPDATE events SET cost = %s WHERE ID = %s;",(eventInfo["cost"],eventID))
+
+    if eventInfo["reduction"]["student"] != "":
+        cur.execute("UPDATE events SET student = %s WHERE ID = %s;",(eventInfo["reduction"]["student"], eventID))
+    if eventInfo["reduction"]["group10"] != "":
+        cur.execute("UPDATE events SET group10 = %s WHERE ID = %s;",(eventInfo["reduction"]["group10"], eventID))
+    if eventInfo["reduction"]["over60"] != "":
+        cur.execute("UPDATE events SET over60 = %s WHERE ID = %s;",(eventInfo["reduction"]["over60"], eventID))
     
     if eventInfo["EN"]["name"] != "":
         newInfo["EN"]["name"] = eventInfo["EN"]["name"]
@@ -298,7 +313,8 @@ def dBReset(conn, dbUser):
     cur = conn.cursor()
 
     cur.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(dbUser)))
-    cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
+    cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int,\
+                 cost int, student float8, group10 float8, over60 float8);")
 
     conn.commit()
     cur.close()
@@ -315,9 +331,9 @@ def dailySchedule(date, passFlag, languages, conn):
     except:
         return None
     cur.execute(sql.SQL("SELECT ID, startTime, endTime, ticketTot,\
-                         ticketLeft, cost FROM events INNER JOIN {} USING(ID)").format(sql.Identifier(str(date))))
+                         ticketLeft, cost, student, group10, over60\
+                         FROM events INNER JOIN {} USING(ID)").format(sql.Identifier(str(date))))
     
-        
     tuplesID = cur.fetchall()
 
     dailyEvents = {}
@@ -340,6 +356,10 @@ def dailySchedule(date, passFlag, languages, conn):
         dailyEvents[eventID]["ticketNum"] = couple[3]
         dailyEvents[eventID]["ticketLeft"] = couple[4]
         dailyEvents[eventID]["cost"] = couple[5]
+        dailyEvents[eventID]["reduction"] = {}
+        dailyEvents[eventID]["reduction"]["student"] = couple[6]
+        dailyEvents[eventID]["reduction"]["group10"] = couple[7]
+        dailyEvents[eventID]["reduction"]["over60"] = couple[8]
         
         if passFlag:
             tablePass = "password "+str(eventID)
@@ -397,7 +417,8 @@ def retreiveInfo(eventID, conn):
 
     cur = conn.cursor()
     
-    cur.execute("SELECT date, ticketTot, ticketLeft, cost FROM events WHERE ID = %s;",(eventID,))
+    cur.execute("SELECT date, ticketTot, ticketLeft,\
+                 cost, student, group10, over60 FROM events WHERE ID = %s;",(eventID,))
 
     couple = cur.fetchone()
     if couple is None: #event not found in the DB
@@ -407,6 +428,10 @@ def retreiveInfo(eventID, conn):
     eventInfo["ticketNum"] = couple[1]
     eventInfo["ticketLeft"] = couple[2]
     eventInfo["cost"] = couple[3]
+    eventInfo["reduction"] = {}
+    eventInfo["reduction"]["student"] = couple[4]
+    eventInfo["reduction"]["group10"] = couple[5]
+    eventInfo["reduction"]["over60"] = couple[6]
     
     cur.execute(sql.SQL("SELECT startTime, endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(couple[0]))),(eventID,))
     couple = cur.fetchone()
