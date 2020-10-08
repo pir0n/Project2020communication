@@ -121,9 +121,6 @@ def add(date, startTime, endTime, ticketNum, cost, conn):
     tableNameInfo = "info "+str(eventID)
     cur.execute(sql.SQL("""CREATE TABLE {} (text varchar(255), 
         type varchar(255), part int);""").format(sql.Identifier(tableNameInfo)))
-    tableNameInfo = "reduction "+str(eventID)
-
-    cur.execute(sql.SQL("CREATE TABLE {} (name varchar(255), val float8);").format(sql.Identifier(tableNameInfo)))
 
     conn.commit()
     cur.close()
@@ -183,15 +180,6 @@ def infoFill(eventID, eventInfo, conn):
         cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,infoType,i))
         i = i + 1
 
-    tableName = "reduction "+str(eventID)
-
-    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableName)))
-
-    for fieldName in eventInfo["reduction"]:
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s,\
-                            %s);").format(sql.Identifier(tableName)),(fieldName,eventInfo["reduction"][fieldName]))
-
-
     conn.commit()
     cur.close()
 
@@ -206,12 +194,6 @@ def infoUpdate(eventID, eventInfo, conn):
 
     if eventInfo["cost"] > -1:
         cur.execute("UPDATE events SET cost = %s WHERE ID = %s;",(eventInfo["cost"],eventID))
-
-    tableName = "reduction "+str(eventID)
-    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableName)))
-    for fieldName in eventInfo["reduction"]:
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s,\
-                            %s);").format(sql.Identifier(tableName)),(fieldName,eventInfo["reduction"][fieldName]))
     
     if eventInfo["EN"]["name"] != "":
         newInfo["EN"]["name"] = eventInfo["EN"]["name"]
@@ -270,8 +252,6 @@ def delete(eventID, conn):
     cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tablePass)))
     tableInfo = "info "+eventID
     cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tableInfo)))
-    tableInfo = "reduction "+eventID
-    cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tableInfo)))
     #delete event table entry for given event
     cur.execute("DELETE FROM events WHERE ID = %s;",(eventID,))
 
@@ -298,8 +278,6 @@ def deleteDate(date, conn):
         tablePass = "password "+eventID
         cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tablePass)))
         tableInfo = "info "+eventID
-        cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tableInfo)))
-        tableInfo = "reduction "+eventID
         cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(tableInfo)))
 
     cur.execute(("DELETE FROM events WHERE ID in (SELECT ID FROM events WHERE date = %s);"),(date,))
@@ -359,16 +337,7 @@ def dailySchedule(date, passFlag, languages, conn):
         dailyEvents[eventID]["endTime"] = couple[2]
         dailyEvents[eventID]["ticketNum"] = couple[3]
         dailyEvents[eventID]["ticketLeft"] = couple[4]
-        dailyEvents[eventID]["cost"] = couple[5]
-
-        dailyEvents[eventID]["reduction"] = {}
-        tableName = "reduction "+str(eventID)
-        cur.execute(sql.SQL("SELECT name, val FROM {};").format(sql.Identifier(tableName)))
-        tuples = cur.fetchall()
-        for couples in tuples:
-            fieldName = couples[0]
-            reductionVal =couples[1]
-            dailyEvents[eventID]["reduction"][fieldName] = reductionVal
+        dailyEvents[eventID]["cost"] = couple[5
 
         if passFlag:
             tablePass = "password "+str(eventID)
@@ -437,16 +406,6 @@ def retreiveInfo(eventID, conn):
     eventInfo["ticketNum"] = couple[1]
     eventInfo["ticketLeft"] = couple[2]
     eventInfo["cost"] = couple[3]
-    eventInfo["reduction"] = {}
-    
-    eventInfo["reduction"] = {}
-    tableName = "reductions "+str(eventID)
-    cur.execute(sql.SQL("SELECT name, val FROM {};").format(sql.Identifier(tableName)))
-    tuples = cur.fetchall()
-    for couples in tuples:
-        fieldName = couples[0]
-        reductionVal = couples[1]
-        eventInfo["reduction"][fieldName] = reductionVal
     
     cur.execute(sql.SQL("SELECT startTime, endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(couple[0]))),(eventID,))
     couple = cur.fetchone()
