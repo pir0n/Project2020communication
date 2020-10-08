@@ -121,9 +121,9 @@ def add(date, startTime, endTime, ticketNum, cost, conn):
     tableNameInfo = "info "+str(eventID)
     cur.execute(sql.SQL("""CREATE TABLE {} (text varchar(255), 
         type varchar(255), part int);""").format(sql.Identifier(tableNameInfo)))
-    tableNameInfo = "reductions "+str(eventID)
+    tableNameInfo = "reduction "+str(eventID)
 
-    cur.execute(sql.SQL("CREATE TABLE {} (name varchar(255));").format(sql.Identifier(tableNameInfo)))
+    cur.execute(sql.SQL("CREATE TABLE {} (name varchar(255), val float8);").format(sql.Identifier(tableNameInfo)))
 
     conn.commit()
     cur.close()
@@ -183,12 +183,13 @@ def infoFill(eventID, eventInfo, conn):
         cur.execute(sql.SQL("INSERT INTO {} VALUES (%s, %s, %s);").format(sql.Identifier(tableNameInfo)),(url,infoType,i))
         i = i + 1
 
-    tableNameInfo = "reductions "+str(eventID)
+    tableName = "reduction "+str(eventID)
 
-    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableNameInfo)))
+    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableName)))
 
-    for reduction in eventInfo["reduction"]:
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s);").format(sql.Identifier(tableNameInfo)),(reduction))
+    for fieldName in eventInfo["reduction"]:
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s,\
+                            %s);").format(sql.Identifier(tableName)),(fieldName,eventInfo["reduction"][fieldName]))
 
 
     conn.commit()
@@ -206,10 +207,11 @@ def infoUpdate(eventID, eventInfo, conn):
     if eventInfo["cost"] > -1:
         cur.execute("UPDATE events SET cost = %s WHERE ID = %s;",(eventInfo["cost"],eventID))
 
-    tableNameInfo = "reductions "+str(eventID)
-    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableNameInfo)))
-    for reduction in eventInfo["reduction"]:
-        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s);").format(sql.Identifier(tableNameInfo)),(reduction))
+    tableName = "reduction "+str(eventID)
+    cur.execute(sql.SQL("DELETE FROM {};").format(sql.Identifier(tableName)))
+    for fieldName in eventInfo["reduction"]:
+        cur.execute(sql.SQL("INSERT INTO {} VALUES (%s,\
+                            %s);").format(sql.Identifier(tableName)),(fieldName,eventInfo["reduction"][fieldName]))
     
     if eventInfo["EN"]["name"] != "":
         newInfo["EN"]["name"] = eventInfo["EN"]["name"]
@@ -360,12 +362,12 @@ def dailySchedule(date, passFlag, languages, conn):
         dailyEvents[eventID]["cost"] = couple[5]
 
         dailyEvents[eventID]["reduction"] = {}
-        tableName = "reductions "+str(eventID)
-        cur.execute(sql.SQL("SELECT name FROM {};").format(sql.Identifier(tableName)))
+        tableName = "reduction "+str(eventID)
+        cur.execute(sql.SQL("SELECT name, val FROM {};").format(sql.Identifier(tableName)))
         tuples = cur.fetchall()
         for couples in tuples:
-            fieldName = couples[0].split(":")[0]
-            reductionVal = float(couples[0].split(":")[1])
+            fieldName = couples[0]
+            reductionVal =couples[1]
             dailyEvents[eventID]["reduction"][fieldName] = reductionVal
 
         if passFlag:
@@ -439,11 +441,11 @@ def retreiveInfo(eventID, conn):
     
     eventInfo["reduction"] = {}
     tableName = "reductions "+str(eventID)
-    cur.execute(sql.SQL("SELECT name FROM {};").format(sql.Identifier(tableName)))
+    cur.execute(sql.SQL("SELECT name, val FROM {};").format(sql.Identifier(tableName)))
     tuples = cur.fetchall()
     for couples in tuples:
-        fieldName = couples[0].split(":")[0]
-        reductionVal = float(couples[0].split(":")[1])
+        fieldName = couples[0]
+        reductionVal = couples[1]
         eventInfo["reduction"][fieldName] = reductionVal
     
     cur.execute(sql.SQL("SELECT startTime, endTime FROM {} WHERE ID = %s;").format(sql.Identifier(str(couple[0]))),(eventID,))
