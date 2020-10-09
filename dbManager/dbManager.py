@@ -397,7 +397,7 @@ def retreiveInfo(eventID, conn):
     cur = conn.cursor()
     
     cur.execute("SELECT date, ticketTot, ticketLeft,\
-                 cost, student, group10, over60 FROM events WHERE ID = %s;",(eventID,))
+                 cost FROM events WHERE ID = %s;",(eventID,))
 
     couple = cur.fetchone()
     if couple is None: #event not found in the DB
