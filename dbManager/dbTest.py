@@ -9,7 +9,7 @@ cost = 10
 remoteDBparams = {"dbname": "dbuwxucc", "user": "dbuwxucc", "password":"VNx-4S_lIaB4ZZ1NPhX3BpZW5MQDgA9C",
                     "host": "kandula.db.elephantsql.com", "port": "5432"}
 conn = dbManager.connectDb(remoteDBparams)
-#dbManager.dBReset(conn,remoteDBparams["user"])
+dbManager.dBReset(conn,remoteDBparams["user"])
 #eventID = dbManager.add(date, startTime, endTime, ticketNum, cost,conn)
 #print(eventID)
 #input()
@@ -38,6 +38,6 @@ date = datetime.date(2020,10,12)
 #input()
 #dbManager.deleteDate(date,conn)
 
-print(dbManager.retreiveCatalog(conn))
+#print(dbManager.retreiveCatalog(conn))
 
 dbManager.disconnectDb(conn)

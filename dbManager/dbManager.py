@@ -298,6 +298,7 @@ def dBReset(conn, dbUser):
 
     cur.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(dbUser)))
     cur.execute("CREATE TABLE events (ID int, date date, ticketTot int, ticketLeft int, cost int);")
+    cur.execute("CREATE TABLE devices (url varchar(255), type int);")
 
     conn.commit()
     cur.close()
@@ -337,7 +338,7 @@ def dailySchedule(date, passFlag, languages, conn):
         dailyEvents[eventID]["endTime"] = couple[2]
         dailyEvents[eventID]["ticketNum"] = couple[3]
         dailyEvents[eventID]["ticketLeft"] = couple[4]
-        dailyEvents[eventID]["cost"] = couple[5
+        dailyEvents[eventID]["cost"] = couple[5]
 
         if passFlag:
             tablePass = "password "+str(eventID)
@@ -502,17 +503,6 @@ def ticketLeftCheck(eventID, conn):
     cur.close()
 
     return ticketLeft
-
-
-def setupDeviceCatalog(conn):
-
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE devices (url varchar(255), type int);")
-
-    conn.commit()
-    cur.close()
-
-    return 1
 
 
 def addMainSystemInfo(mainUrl, mqttBroker, conn):
